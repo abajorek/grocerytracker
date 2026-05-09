@@ -17,7 +17,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter+Tight:wght@400..700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: light;
@@ -29,19 +29,26 @@
       --hairline: rgba(28,28,26,0.10);
       --olive: #6c7559;
       --olive-deep: #525a42;
+      --coral: #ff7a6b;
+      --coral-deep: #e85a4a;
+      --peach: #ffd5cc;
       --notice-bg: #f3f1ea;
       --notice-border: #dcdbd2;
       --success-bg: #e8ebe0;
       --success-text: #4d553e;
       --shadow: 0 8px 24px rgba(28, 28, 26, 0.08);
       --shadow-lg: 0 16px 40px rgba(28, 28, 26, 0.16);
+      --serif: 'Fraunces', 'DM Serif Display', Georgia, serif;
+      --sans: 'Inter Tight', 'Inter', system-ui, -apple-system, sans-serif;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; overflow: hidden; background: var(--paper); }
     body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-family: var(--sans);
       color: var(--ink);
       overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     .brand-bar {
@@ -57,12 +64,14 @@
     }
     .brand-bar::-webkit-scrollbar { display: none; }
     .brand-bar h1 {
-      font-family: 'DM Serif Display', serif;
+      font-family: var(--serif);
+      font-variation-settings: 'opsz' 144;
+      font-weight: 600;
       color: var(--ink);
-      font-size: 22px;
+      font-size: 24px;
       white-space: nowrap;
-      margin-right: 6px;
-      letter-spacing: 0.5px;
+      margin-right: 8px;
+      letter-spacing: -0.5px;
     }
     .chip {
       flex-shrink: 0;
@@ -90,8 +99,8 @@
       border: 1px dashed rgba(28,28,26,0.25);
     }
     .chip.saved.active {
-      background: var(--ink); color: var(--paper);
-      border-color: var(--ink); border-style: solid;
+      background: var(--coral); color: #fff;
+      border-color: var(--coral-deep); border-style: solid;
     }
 
     .feed {
@@ -190,11 +199,14 @@
       z-index: 5;
     }
     .card-brand {
-      font-family: 'DM Serif Display', serif;
-      font-size: 24px;
-      letter-spacing: 0.5px;
+      font-family: var(--serif);
+      font-variation-settings: 'opsz' 144;
+      font-weight: 500;
+      font-size: 28px;
+      letter-spacing: -0.5px;
       margin-bottom: 6px;
       text-shadow: 0 2px 8px rgba(0,0,0,0.45);
+      line-height: 1.05;
     }
     .card-title {
       font-size: 15px;
@@ -203,6 +215,7 @@
       text-shadow: 0 1px 6px rgba(0,0,0,0.5);
       margin-bottom: 12px;
       opacity: 0.95;
+      font-weight: 400;
     }
     .price-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .price-tag {
@@ -213,6 +226,7 @@
       font-weight: 700;
       font-size: 16px;
       box-shadow: var(--shadow);
+      letter-spacing: -0.2px;
     }
     .time-tag {
       background: rgba(250,250,247,0.92);
@@ -222,7 +236,7 @@
       font-size: 13px;
       font-weight: 600;
     }
-    .time-tag.urgent { background: var(--olive); color: #fff; }
+    .time-tag.urgent { background: var(--coral-deep); color: #fff; }
     .bid-tag {
       background: rgba(28,28,26,0.85);
       color: var(--paper);
@@ -255,15 +269,15 @@
       font-family: inherit;
     }
     .action-btn:active { transform: scale(0.92); }
-    .action-btn.fav.active { background: var(--ink); color: var(--paper); }
+    .action-btn.fav.active { background: var(--coral); color: #fff; }
 
     .burst {
       position: absolute; left: 50%; top: 50%;
       transform: translate(-50%, -50%) scale(0);
       font-size: 110px;
-      color: var(--paper);
+      color: var(--coral);
       pointer-events: none;
-      filter: drop-shadow(0 4px 14px rgba(0,0,0,0.55));
+      filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
       z-index: 8;
       opacity: 0;
     }
@@ -280,19 +294,21 @@
       top: 50%;
       padding: 18px 30px;
       border-radius: 999px;
-      font-family: 'DM Serif Display', serif;
+      font-family: var(--serif);
+      font-variation-settings: 'opsz' 144;
+      font-weight: 500;
       font-size: 26px;
-      color: var(--paper);
+      color: #fff;
       pointer-events: none;
       z-index: 9;
       opacity: 0;
       transform: translateY(-50%) scale(0.7);
       transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
       box-shadow: var(--shadow-lg);
-      letter-spacing: 0.5px;
+      letter-spacing: -0.3px;
       white-space: nowrap;
     }
-    .swipe-overlay.save { left: 24px; background: var(--ink); border: 2px solid #000; }
+    .swipe-overlay.save { left: 24px; background: var(--coral); border: 2px solid var(--coral-deep); }
     .swipe-overlay.bid  { right: 24px; background: var(--olive); border: 2px solid var(--olive-deep); }
     .swipe-overlay.show { opacity: 1; transform: translateY(-50%) scale(1); }
     .swipe-overlay.peek { opacity: 0.7; }
@@ -325,19 +341,22 @@
       border-radius: 4px; margin: 0 auto 18px;
     }
     .drawer h2 {
-      font-family: 'DM Serif Display', serif;
-      font-size: 26px;
+      font-family: var(--serif);
+      font-variation-settings: 'opsz' 144;
+      font-weight: 500;
+      font-size: 28px;
       color: var(--ink);
       margin-bottom: 6px;
-      line-height: 1.2;
+      line-height: 1.15;
+      letter-spacing: -0.5px;
     }
     .pill {
       display: inline-block;
-      background: transparent;
-      color: var(--ink);
+      background: var(--coral);
+      color: #fff;
       padding: 4px 12px;
       border-radius: 999px;
-      border: 1px solid var(--ink);
+      border: none;
       font-size: 11px;
       letter-spacing: 1px;
       margin-bottom: 14px;
@@ -377,21 +396,25 @@
       z-index: 3;
     }
     .center-msg h3 {
-      font-family: 'DM Serif Display', serif;
-      font-size: 30px; margin-bottom: 10px;
+      font-family: var(--serif);
+      font-variation-settings: 'opsz' 144;
+      font-weight: 500;
+      font-size: 32px; margin-bottom: 10px;
       color: var(--ink);
+      letter-spacing: -0.5px;
+      line-height: 1.1;
     }
     .center-msg p { color: var(--ink-soft); max-width: 320px; line-height: 1.45; }
     .dots { margin-top: 14px; display: inline-flex; gap: 6px; }
     .dots span {
       width: 8px; height: 8px; border-radius: 50%;
-      background: var(--ink);
+      background: var(--coral);
       animation: bounce 1.2s infinite ease-in-out;
     }
     .dots span:nth-child(2) { animation-delay: 0.15s; }
     .dots span:nth-child(3) { animation-delay: 0.3s; }
     @keyframes bounce {
-      0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
       40% { transform: translateY(-8px); opacity: 1; }
     }
 
@@ -407,10 +430,13 @@
     }
     @media (min-height: 700px) { .modal { border-radius: 18px; padding: 24px; } }
     .modal h3 {
-      font-family: 'DM Serif Display', serif;
-      font-size: 26px;
+      font-family: var(--serif);
+      font-variation-settings: 'opsz' 144;
+      font-weight: 500;
+      font-size: 28px;
       margin-bottom: 6px;
       color: var(--ink);
+      letter-spacing: -0.5px;
     }
     .modal-sub {
       color: var(--ink-soft);
@@ -428,7 +454,7 @@
       color: var(--ink);
       font-family: inherit;
     }
-    .modal input:focus { outline: 1.5px solid var(--ink); outline-offset: 1px; border-color: transparent; }
+    .modal input:focus { outline: 1.5px solid var(--coral); outline-offset: 1px; border-color: transparent; }
     .modal-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
     .modal-list .chip { background: transparent; color: var(--ink); border: 1px solid var(--hairline); }
     .modal-list .chip .x { margin-left: 6px; opacity: 0.5; font-weight: 600; }
@@ -524,7 +550,7 @@
 
     @media (max-width: 380px) {
       .card-info { right: 76px; }
-      .card-brand { font-size: 21px; }
+      .card-brand { font-size: 24px; }
       .gallery-pip { bottom: calc(env(safe-area-inset-bottom, 16px) + 165px); }
     }
   </style>
