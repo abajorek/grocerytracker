@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#4a3b2a">
+  <title>Sarah's Thrift Feed</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cream: #faf4e9;
+      --cream-2: #f3ead8;
+      --sage: #9caf88;
+      --sage-deep: #6f8264;
+      --rose: #d8a7a7;
+      --rose-deep: #b87a7a;
+      --brown: #4a3b2a;
+      --brown-soft: #6f5b44;
+      --shadow: 0 10px 30px rgba(74, 59, 42, 0.18);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; overflow: hidden; background: var(--brown); }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      color: var(--brown);
+      overscroll-behavior: none;
+    }
+
+    .brand-bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+      padding: max(env(safe-area-inset-top), 12px) 12px 10px;
+      background: linear-gradient(to bottom, rgba(74,59,42,0.6), transparent);
+      display: flex; gap: 8px; overflow-x: auto;
+      scrollbar-width: none;
+      align-items: center;
+    }
+    .brand-bar::-webkit-scrollbar { display: none; }
+    .brand-bar h1 {
+      font-family: 'DM Serif Display', serif;
+      color: var(--cream);
+      font-size: 22px;
+      white-space: nowrap;
+      margin-right: 6px;
+      letter-spacing: 0.5px;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.35);
+    }
+    .chip {
+      flex-shrink: 0;
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: rgba(250, 244, 233, 0.92);
+      color: var(--brown);
+      font-size: 14px;
+      font-weight: 500;
+      border: 1px solid rgba(255,255,255,0.4);
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.2s ease;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    .chip:active { transform: scale(0.95); }
+    .chip.active {
+      background: var(--rose);
+      color: var(--cream);
+      border-color: var(--rose-deep);
+    }
+    .chip.add, .chip.saved {
+      background: transparent;
+      color: var(--cream);
+      border: 1px dashed rgba(250,244,233,0.7);
+    }
+    .chip.saved.active { background: var(--sage); border-color: var(--sage-deep); }
+
+    .feed {
+      height: 100vh; height: 100dvh;
+      overflow-y: auto;
+      scroll-snap-type: y mandatory;
+      scroll-behavior: smooth;
+      scrollbar-width: none;
+    }
+    .feed::-webkit-scrollbar { display: none; }
+
+    .card {
+      position: relative;
+      height: 100vh; height: 100dvh;
+      width: 100vw;
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+      background: var(--cream-2);
+      overflow: hidden;
+    }
+    .card-img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      background: var(--cream-2);
+      transition: opacity 0.4s ease;
+    }
+    .card-shade {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      height: 60%;
+      background: linear-gradient(to top, rgba(74,59,42,0.9), rgba(74,59,42,0.45) 45%, transparent);
+      pointer-events: none;
+    }
+
+    .card-info {
+      position: absolute; left: 18px; right: 84px;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 22px);
+      color: var(--cream);
+      z-index: 5;
+    }
+    .card-brand {
+      font-family: 'DM Serif Display', serif;
+      font-size: 24px;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .card-title {
+      font-size: 15px;
+      line-height: 1.35;
+      max-height: 4.05em; overflow: hidden;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.45);
+      margin-bottom: 12px;
+      opacity: 0.95;
+    }
+    .price-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .price-tag {
+      background: var(--cream);
+      color: var(--brown);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 16px;
+      box-shadow: var(--shadow);
+    }
+    .time-tag {
+      background: rgba(216, 167, 167, 0.95);
+      color: var(--cream);
+      padding: 8px 13px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .time-tag.urgent { background: rgba(176, 80, 80, 0.95); }
+    .bid-tag { background: rgba(156,175,136,0.95); color: var(--cream); padding: 8px 13px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+
+    .actions {
+      position: absolute;
+      right: 14px;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 22px);
+      display: flex; flex-direction: column; gap: 14px;
+      align-items: center;
+      z-index: 5;
+    }
+    .action-btn {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: rgba(250,244,233,0.92);
+      color: var(--brown);
+      border: none;
+      font-size: 22px;
+      display: grid; place-items: center;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      text-decoration: none;
+      transition: transform 0.15s ease, background 0.2s ease;
+      font-family: inherit;
+    }
+    .action-btn:active { transform: scale(0.92); }
+    .action-btn.fav.active { background: var(--rose); color: var(--cream); }
+
+    .burst {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      font-size: 110px;
+      color: var(--rose);
+      pointer-events: none;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35));
+      z-index: 8;
+      opacity: 0;
+    }
+    .burst.go { animation: burst 720ms ease-out forwards; }
+    @keyframes burst {
+      0%   { transform: translate(-50%,-50%) scale(0.2); opacity: 0; }
+      30%  { transform: translate(-50%,-50%) scale(1.25); opacity: 1; }
+      80%  { transform: translate(-50%,-50%) scale(1.0); opacity: 0.9; }
+      100% { transform: translate(-50%,-50%) scale(0.7); opacity: 0; }
+    }
+
+    .drawer-bg {
+      position: fixed; inset: 0; z-index: 40;
+      background: rgba(74,59,42,0.5);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .drawer-bg.open { opacity: 1; pointer-events: auto; }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: min(420px, 88vw);
+      background: var(--cream);
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      z-index: 41;
+      overflow-y: auto;
+      padding: 22px 22px calc(env(safe-area-inset-bottom, 24px) + 24px);
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-handle {
+      width: 40px; height: 4px; background: var(--cream-2);
+      border-radius: 4px; margin: 0 auto 18px;
+    }
+    .drawer h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 26px;
+      color: var(--brown);
+      margin-bottom: 6px;
+      line-height: 1.2;
+    }
+    .pill {
+      display: inline-block;
+      background: var(--sage);
+      color: var(--cream);
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+    }
+    .row {
+      display: flex; justify-content: space-between;
+      padding: 12px 0; border-bottom: 1px solid var(--cream-2);
+      font-size: 14px;
+    }
+    .row b { color: var(--brown); font-weight: 600; }
+    .row span { color: var(--brown-soft); }
+    .drawer-actions { margin-top: 22px; display: flex; gap: 10px; }
+    .drawer-actions a, .drawer-actions button {
+      flex: 1;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-primary { background: var(--sage); color: var(--cream); }
+    .btn-secondary { background: var(--cream-2); color: var(--brown); }
+
+    .center-msg {
+      position: absolute; inset: 0;
+      display: grid; place-items: center;
+      color: var(--cream);
+      text-align: center;
+      padding: 24px;
+    }
+    .center-msg h3 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 30px; margin-bottom: 10px;
+      color: var(--cream);
+    }
+    .center-msg p { opacity: 0.9; max-width: 320px; line-height: 1.45; }
+
+    .modal-bg {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(74,59,42,0.65);
+      display: none; place-items: center;
+      padding: 24px;
+    }
+    .modal-bg.open { display: grid; }
+    .modal {
+      background: var(--cream);
+      border-radius: 18px;
+      padding: 24px;
+      max-width: 420px; width: 100%;
+      box-shadow: var(--shadow);
+    }
+    .modal h3 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 24px;
+      margin-bottom: 14px;
+      color: var(--brown);
+    }
+    .modal input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--cream-2);
+      font-size: 15px;
+      margin-bottom: 14px;
+      background: var(--cream-2);
+      color: var(--brown);
+      font-family: inherit;
+    }
+    .modal input:focus { outline: 2px solid var(--sage); }
+    .modal-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .modal-list .chip { background: var(--cream-2); color: var(--brown); border: none; }
+    .modal-list .chip .x { margin-left: 6px; opacity: 0.55; font-weight: 600; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .modal-actions button {
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    @media (max-width: 380px) {
+      .card-info { right: 76px; }
+      .card-brand { font-size: 21px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="brand-bar" id="brandBar">
+    <h1>Thrift</h1>
+  </div>
+
+  <div class="feed" id="feed">
+    <div class="card">
+      <div class="center-msg">
+        <div>
+          <h3>Pick a brand</h3>
+          <p>Tap a chip up top to start scrolling. Flick up for the next find. Double-tap to save.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer-bg" id="drawerBg"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-handle"></div>
+    <div id="drawerContent"></div>
+  </aside>
+
+  <div class="modal-bg" id="brandModalBg">
+    <div class="modal">
+      <h3>Pin your brands</h3>
+      <div class="modal-list" id="brandList"></div>
+      <input id="brandInput" placeholder="Add a brand (Coach, Madewell…)" autocomplete="off">
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeBrandModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      brands: [],
+      activeBrand: null,
+      page: 1,
+      items: [],
+      favorites: new Set(),
+      mode: 'feed', // 'feed' | 'saved'
+      loading: false,
+      exhausted: false,
+    };
+
+    const fmtPrice = n => `$${(Number(n) || 0).toFixed(2)}`;
+    const isUrgent = s => s > 0 && s < 3600;
+    function fmtTime(seconds) {
+      if (!Number.isFinite(seconds) || seconds <= 0) return 'Ended';
+      const d = Math.floor(seconds / 86400);
+      const h = Math.floor((seconds % 86400) / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (d > 0) return `${d}d ${h}h left`;
+      if (h > 0) return `${h}h ${m}m left`;
+      return `${Math.max(1, m)}m left`;
+    }
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function apiGet(path) {
+      const r = await fetch(path);
+      if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
+      return r.json();
+    }
+    async function apiSend(path, method, body) {
+      const r = await fetch(path, {
+        method,
+        headers: {'Content-Type': 'application/json'},
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!r.ok) throw new Error(`${method} ${path} → ${r.status}`);
+      return r.json();
+    }
+
+    async function loadBrands() {
+      try { state.brands = await apiGet('/api/brands'); }
+      catch { state.brands = ['Coach', 'Madewell', 'Patagonia', 'J.Crew', 'Free People']; }
+      renderBrandBar();
+      renderBrandModal();
+    }
+    async function saveBrands() {
+      try { state.brands = await apiSend('/api/brands', 'POST', state.brands); }
+      catch (e) { console.warn('save brands failed', e); }
+      renderBrandBar();
+      renderBrandModal();
+    }
+
+    function renderBrandBar() {
+      const bar = document.getElementById('brandBar');
+      bar.innerHTML = '<h1>Thrift</h1>';
+      state.brands.forEach(b => {
+        const c = document.createElement('button');
+        c.className = 'chip' + (state.mode === 'feed' && b === state.activeBrand ? ' active' : '');
+        c.textContent = b;
+        c.onclick = () => selectBrand(b);
+        bar.appendChild(c);
+      });
+      const add = document.createElement('button');
+      add.className = 'chip add';
+      add.textContent = '+ pin';
+      add.onclick = openBrandModal;
+      bar.appendChild(add);
+      const sav = document.createElement('button');
+      sav.className = 'chip saved' + (state.mode === 'saved' ? ' active' : '');
+      sav.innerHTML = '♥ saved';
+      sav.onclick = showFavorites;
+      bar.appendChild(sav);
+    }
+
+    async function selectBrand(brand) {
+      state.activeBrand = brand;
+      state.mode = 'feed';
+      state.page = 1;
+      state.items = [];
+      state.exhausted = false;
+      renderBrandBar();
+      document.getElementById('feed').innerHTML = `
+        <div class="card">
+          <div class="center-msg">
+            <div>
+              <h3>Pulling ${escapeHtml(brand)} finds…</h3>
+              <p>Flick up to scroll. Double-tap to save. Swipe right or tap “i” for details.</p>
+            </div>
+          </div>
+        </div>`;
+      await loadMore();
+    }
+
+    async function loadMore() {
+      if (state.mode !== 'feed' || !state.activeBrand || state.loading || state.exhausted) return;
+      state.loading = true;
+      try {
+        const items = await apiGet(`/api/feed?brand=${encodeURIComponent(state.activeBrand)}&page=${state.page}`);
+        if (!items.length) state.exhausted = true;
+        state.items.push(...items);
+        state.page += 1;
+        renderFeed();
+      } catch (e) {
+        renderError(e);
+      } finally {
+        state.loading = false;
+      }
+    }
+
+    function renderFeed() {
+      const feed = document.getElementById('feed');
+      if (state.items.length === 0) {
+        feed.innerHTML = `
+          <div class="card">
+            <div class="center-msg">
+              <div><h3>No ${escapeHtml(state.activeBrand)} listings</h3>
+              <p>Try another pinned brand or check back soon.</p></div>
+            </div>
+          </div>`;
+        return;
+      }
+      feed.innerHTML = state.items.map(cardHTML).join('');
+      feed.querySelectorAll('.card[data-id]').forEach(attachGestures);
+      observeLastCard();
+    }
+
+    function cardHTML(it, idx) {
+      const saved = state.favorites.has(it.id);
+      const heart = saved ? '♥' : '♡';
+      const heartCls = saved ? 'action-btn fav active' : 'action-btn fav';
+      const urgent = isUrgent(it.seconds_left) ? ' urgent' : '';
+      return `
+        <article class="card" data-idx="${idx}" data-id="${it.id}">
+          <img class="card-img" src="${escapeHtml(it.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" onerror="this.removeAttribute('src');">
+          <div class="card-shade"></div>
+          <div class="burst" data-burst>♥</div>
+          <div class="card-info">
+            <div class="card-brand">${escapeHtml(it.brand)}</div>
+            <div class="card-title">${escapeHtml(it.title)}</div>
+            <div class="price-row">
+              <span class="price-tag">${fmtPrice(it.current_price)}</span>
+              <span class="time-tag${urgent}" data-time="${it.seconds_left}">${fmtTime(it.seconds_left)}</span>
+              ${it.bid_count ? `<span class="bid-tag">${it.bid_count} bid${it.bid_count === 1 ? '' : 's'}</span>` : ''}
+            </div>
+          </div>
+          <div class="actions">
+            <button class="${heartCls}" data-fav aria-label="Save">${heart}</button>
+            <button class="action-btn" data-info aria-label="Details">i</button>
+            <a class="action-btn" href="${escapeHtml(it.listing_url)}" target="_blank" rel="noopener" aria-label="Open on ShopGoodwill">↗</a>
+          </div>
+        </article>`;
+    }
+
+    function renderError(e) {
+      document.getElementById('feed').innerHTML = `
+        <div class="card">
+          <div class="center-msg">
+            <div><h3>Couldn't load</h3>
+            <p>${escapeHtml(e && e.message || e)}</p></div>
+          </div>
+        </div>`;
+    }
+
+    function attachGestures(card) {
+      const id = parseInt(card.dataset.id, 10);
+      const item = state.items.find(x => x.id === id);
+      if (!item) return;
+      const burst = card.querySelector('[data-burst]');
+
+      let lastTap = 0;
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button,a')) return;
+        const now = Date.now();
+        if (now - lastTap < 320) {
+          if (!state.favorites.has(item.id)) toggleFav(item, card);
+          fireBurst(burst);
+        }
+        lastTap = now;
+      });
+
+      let startX = 0, startY = 0, tracking = false;
+      card.addEventListener('touchstart', (e) => {
+        if (e.target.closest('button,a')) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        tracking = true;
+      }, { passive: true });
+      card.addEventListener('touchend', (e) => {
+        if (!tracking) return;
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        if (dx > 70 && Math.abs(dy) < 60) openDrawer(item);
+        tracking = false;
+      }, { passive: true });
+
+      card.querySelector('[data-fav]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFav(item, card);
+      });
+      card.querySelector('[data-info]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openDrawer(item);
+      });
+    }
+
+    function fireBurst(el) {
+      el.classList.remove('go');
+      void el.offsetWidth;
+      el.classList.add('go');
+    }
+
+    async function toggleFav(item, card) {
+      const btn = card && card.querySelector('[data-fav]');
+      if (state.favorites.has(item.id)) {
+        state.favorites.delete(item.id);
+        if (btn) { btn.classList.remove('active'); btn.textContent = '♡'; }
+        try { await fetch(`/api/favorites/${item.id}`, { method: 'DELETE' }); } catch {}
+      } else {
+        state.favorites.add(item.id);
+        if (btn) { btn.classList.add('active'); btn.textContent = '♥'; }
+        try {
+          await apiSend('/api/favorites', 'POST', {
+            item_id: item.id,
+            title: item.title,
+            image_url: item.image_url,
+            listing_url: item.listing_url,
+            saved_at: new Date().toISOString(),
+          });
+        } catch (e) { console.warn(e); }
+      }
+    }
+
+    async function loadFavorites() {
+      try {
+        const favs = await apiGet('/api/favorites');
+        state.favorites = new Set(favs.map(f => f.item_id));
+      } catch {}
+    }
+
+    async function showFavorites() {
+      state.mode = 'saved';
+      renderBrandBar();
+      try {
+        const favs = await apiGet('/api/favorites');
+        const feed = document.getElementById('feed');
+        if (!favs.length) {
+          feed.innerHTML = `<div class="card"><div class="center-msg"><div><h3>Nothing saved yet</h3><p>Double-tap any card to save it here.</p></div></div></div>`;
+          return;
+        }
+        feed.innerHTML = favs.map((f, idx) => `
+          <article class="card">
+            <img class="card-img" src="${escapeHtml(f.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" onerror="this.removeAttribute('src');">
+            <div class="card-shade"></div>
+            <div class="card-info">
+              <div class="card-brand">Saved</div>
+              <div class="card-title">${escapeHtml(f.title)}</div>
+              <div class="price-row">
+                <a class="price-tag" href="${escapeHtml(f.listing_url)}" target="_blank" rel="noopener" style="text-decoration:none;">Open ↗</a>
+              </div>
+            </div>
+          </article>`).join('');
+      } catch (e) {
+        renderError(e);
+      }
+    }
+
+    function openDrawer(item) {
+      const c = document.getElementById('drawerContent');
+      c.innerHTML = `
+        <span class="pill">${escapeHtml(item.brand)}</span>
+        <h2>${escapeHtml(item.title)}</h2>
+        <div class="row"><b>Current bid</b><span>${fmtPrice(item.current_price)}</span></div>
+        <div class="row"><b>Minimum next bid</b><span>${fmtPrice(item.minimum_bid)}</span></div>
+        <div class="row"><b>Bids placed</b><span>${item.bid_count || 0}</span></div>
+        <div class="row"><b>Time left</b><span>${fmtTime(item.seconds_left)}</span></div>
+        ${item.location ? `<div class="row"><b>Seller</b><span>${escapeHtml(item.location)}</span></div>` : ''}
+        <div class="drawer-actions">
+          <a class="btn-primary" href="${escapeHtml(item.listing_url)}" target="_blank" rel="noopener">Bid on ShopGoodwill</a>
+          <button class="btn-secondary" onclick="closeDrawer()">Close</button>
+        </div>`;
+      document.getElementById('drawer').classList.add('open');
+      document.getElementById('drawer').setAttribute('aria-hidden', 'false');
+      document.getElementById('drawerBg').classList.add('open');
+    }
+    function closeDrawer() {
+      document.getElementById('drawer').classList.remove('open');
+      document.getElementById('drawer').setAttribute('aria-hidden', 'true');
+      document.getElementById('drawerBg').classList.remove('open');
+    }
+    document.getElementById('drawerBg').addEventListener('click', closeDrawer);
+
+    function openBrandModal() {
+      renderBrandModal();
+      document.getElementById('brandModalBg').classList.add('open');
+      setTimeout(() => document.getElementById('brandInput').focus(), 50);
+    }
+    function closeBrandModal() {
+      document.getElementById('brandModalBg').classList.remove('open');
+    }
+    function renderBrandModal() {
+      const list = document.getElementById('brandList');
+      list.innerHTML = state.brands.map(b => `
+        <button class="chip" data-b="${escapeHtml(b)}">${escapeHtml(b)} <span class="x">×</span></button>
+      `).join('');
+      list.querySelectorAll('.chip').forEach(el => {
+        el.onclick = () => {
+          const b = el.dataset.b;
+          state.brands = state.brands.filter(x => x !== b);
+          if (state.activeBrand === b) state.activeBrand = null;
+          saveBrands();
+        };
+      });
+      const inp = document.getElementById('brandInput');
+      inp.onkeydown = (e) => {
+        if (e.key === 'Enter' && inp.value.trim()) {
+          const b = inp.value.trim();
+          if (!state.brands.includes(b)) state.brands.push(b);
+          inp.value = '';
+          saveBrands();
+        }
+      };
+    }
+
+    let observer;
+    function observeLastCard() {
+      if (observer) observer.disconnect();
+      const cards = document.querySelectorAll('.card[data-id]');
+      if (cards.length < 2) return;
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) loadMore(); });
+      }, { threshold: 0.3 });
+      observer.observe(cards[cards.length - 2]);
+    }
+
+    setInterval(() => {
+      document.querySelectorAll('[data-time]').forEach(el => {
+        let s = parseInt(el.dataset.time, 10);
+        if (!Number.isFinite(s)) return;
+        s = Math.max(0, s - 1);
+        el.dataset.time = s;
+        el.textContent = fmtTime(s);
+        if (isUrgent(s)) el.classList.add('urgent');
+      });
+    }, 1000);
+
+    (async function init() {
+      await loadFavorites();
+      await loadBrands();
+    })();
+  </script>
+</body>
+</html>
