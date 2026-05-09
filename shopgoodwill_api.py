@@ -19,6 +19,11 @@ Production (Render / Railway / Fly):
 If anonymous ShopGoodwill search starts returning 401, set
 SHOPGOODWILL_TOKEN to a JWT lifted from a logged-in browser session.
 The same token is required for /api/bid (placing real bids).
+
+For /api/retail (Claude-vision-powered retail price lookup), set
+ANTHROPIC_API_KEY. Optional: ANTHROPIC_MODEL (defaults to
+claude-haiku-4-5-20251001 for cost; switch to claude-sonnet-4-6 for
+sharper product identification).
 """
 
 import html as html_module
@@ -68,6 +73,9 @@ DEFAULT_BRANDS = [
 
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or ""
+
+ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip()
 
 
 class FeedItem(BaseModel):
@@ -193,25 +201,6 @@ DEFAULT_HEADERS = {
     "Sec-Fetch-Site": "same-site",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Dest": "empty",
-}
-
-BROWSER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not.A/Brand";v="99"',
-    "Sec-Ch-Ua-Mobile": "?0",
-    "Sec-Ch-Ua-Platform": '"Windows"',
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
 }
 
 
@@ -456,8 +445,6 @@ def _strip_html(value: str) -> str:
 
 
 def _extract_notes(html_description: str) -> List[str]:
-    """Pull "Label: value" item-spec lines from the HTML description, dropping
-    boilerplate (return policy, shipping, marketing)."""
     text = _strip_html(html_description)
     out: List[str] = []
     seen = set()
@@ -483,7 +470,15 @@ def _extract_notes(html_description: str) -> List[str]:
     return out
 
 
+_DETAIL_CACHE: Dict[int, Dict[str, Any]] = {}
+_DETAIL_TTL = 1800  # 30 min
+
+
 def _fetch_item_detail(item_id: int) -> dict:
+    cached = _DETAIL_CACHE.get(item_id)
+    if cached and time.time() - cached["t"] < _DETAIL_TTL:
+        return cached["v"]
+
     headers = dict(DEFAULT_HEADERS)
     token = os.environ.get("SHOPGOODWILL_TOKEN")
     if token:
@@ -502,123 +497,162 @@ def _fetch_item_detail(item_id: int) -> dict:
             detail=f"ShopGoodwill returned {resp.status_code}: {body}",
         )
     try:
-        return resp.json()
+        data = resp.json()
     except ValueError:
         snippet = (resp.text or "")[:240].replace("\n", " ")
         raise HTTPException(
             status_code=502, detail=f"non-JSON ({resp.status_code}): {snippet}"
         )
 
+    _DETAIL_CACHE[item_id] = {"v": data, "t": time.time()}
+    if len(_DETAIL_CACHE) > 200:
+        for k in list(_DETAIL_CACHE.keys())[:50]:
+            _DETAIL_CACHE.pop(k, None)
+    return data
 
-# ---------- eBay sold-listing comps ----------
 
-_TITLE_NOISE = re.compile(
-    r'\b(BEST\s+PRICE|NWT|NWOT|EUC|GUC|VTG|VINTAGE|RARE|SEALED|LOT\s+OF|'
-    r'NIB|MIB|VG\+?|NEW\s+WITH\s+TAGS|PREOWNED|PRE-OWNED|AS\s+IS)\b',
-    re.IGNORECASE,
+# ---------- retail-price lookup via Claude vision ----------
+
+_RETAIL_CACHE: Dict[int, Dict[str, Any]] = {}
+_RETAIL_TTL = 86400  # 24h
+
+_RETAIL_PROMPT = (
+    "You're identifying a thrift-store auction listing. Use BOTH the photo and "
+    "the title together to identify the *specific* product (e.g. not 'Coach "
+    "handbag' but 'Coach Signature Canvas Stripe Tote'). Then estimate the "
+    "original RETAIL price someone would pay to buy this same item NEW from the "
+    "brand or a similar new retailer today.\n\n"
+    "Title: {title}\n"
+    "{brand_line}"
+    "\n"
+    "Reply with JSON only, no other text:\n"
+    "{{\n"
+    '  "product": "specific product name",\n'
+    '  "retail_low": <integer dollars>,\n'
+    '  "retail_high": <integer dollars>,\n'
+    '  "confidence": "high" | "medium" | "low",\n'
+    '  "note": "one short sentence about how confident and why"\n'
+    "}}\n\n"
+    "If you can't identify the specific item confidently, set confidence to "
+    '"low" and use a wider range based on what's visible in the photo.'
 )
 
 
-def _clean_title_for_comps(title: str) -> str:
-    if not title:
-        return ""
-    cleaned = _TITLE_NOISE.sub(" ", title)
-    cleaned = re.sub(r"[\(\)\[\]\{\}]", " ", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    return cleaned[:90]
-
-
-def _shorten_title(title: str) -> str:
-    """Take the first 5-6 significant words for a fallback narrower search."""
-    words = [w for w in title.split() if len(w) >= 2]
-    if len(words) <= 5:
-        return title
-    return " ".join(words[:6])
-
-
-def _ebay_search_sold(query: str) -> Optional[dict]:
-    if len(query) < 4:
+def _parse_retail_json(text: str) -> Optional[dict]:
+    if not text:
         return None
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```\s*$", "", text)
+    obj = None
     try:
-        resp = requests.get(
-            "https://www.ebay.com/sch/i.html",
-            params={
-                "_nkw": query,
-                "LH_Sold": "1",
-                "LH_Complete": "1",
-                "_sop": "13",  # sort: ended recently
-                "_ipg": "60",  # 60 per page
-            },
-            headers=BROWSER_HEADERS,
-            timeout=12,
-        )
-    except requests.RequestException:
-        return None
-    if not resp.ok:
-        return None
-
-    body = resp.text or ""
-    # Pull the price spans. eBay's class is "s-item__price"; the very first
-    # "Shop on eBay" promo card has its own price block we want to skip.
-    raw_prices: List[float] = []
-    for m in re.finditer(r's-item__price[^>]*>([^<]+)<', body):
-        snippet = m.group(1)
-        for v in re.findall(r'\$\s*([0-9,]+(?:\.\d{2})?)', snippet):
+        obj = json.loads(text)
+    except (ValueError, TypeError):
+        m = re.search(r"\{[\s\S]+\}", text)
+        if m:
             try:
-                raw_prices.append(float(v.replace(",", "")))
-            except ValueError:
-                continue
-    # eBay tends to repeat the promo card price; drop the first if we got many.
-    if len(raw_prices) >= 6:
-        raw_prices = raw_prices[1:]
-
-    # Need at least a handful of data points for a meaningful number.
-    if len(raw_prices) < 3:
+                obj = json.loads(m.group(0))
+            except (ValueError, TypeError):
+                obj = None
+    if not isinstance(obj, dict):
         return None
+    out: Dict[str, Any] = {}
+    if obj.get("product"):
+        out["product"] = str(obj["product"])[:120]
+    for k in ("retail_low", "retail_high"):
+        v = obj.get(k)
+        try:
+            out[k] = float(v) if v is not None else None
+        except (ValueError, TypeError):
+            out[k] = None
+    conf = str(obj.get("confidence", "")).lower()
+    out["confidence"] = conf if conf in ("high", "medium", "low") else "low"
+    if obj.get("note"):
+        out["note"] = str(obj["note"])[:240]
+    return out
 
-    raw_prices.sort()
-    n = len(raw_prices)
-    median = raw_prices[n // 2] if n % 2 else (raw_prices[n // 2 - 1] + raw_prices[n // 2]) / 2
 
-    # Trim wild outliers (>3x or <0.2x median) before reporting low/high.
-    filtered = [p for p in raw_prices if 0.2 * median <= p <= 3 * median]
-    if len(filtered) < 3:
-        filtered = raw_prices
+def _retail_estimate(item_id: int, title: str, brand: str, image_url: str) -> dict:
+    if not ANTHROPIC_API_KEY:
+        return {
+            "ok": False,
+            "reason": (
+                "ANTHROPIC_API_KEY is not set on the server. Add it in "
+                "Render → Environment to enable retail-price lookup."
+            ),
+        }
 
-    return {
-        "query": query,
-        "count": len(filtered),
-        "median": round(median, 2),
-        "low": round(filtered[0], 2),
-        "high": round(filtered[-1], 2),
+    cached = _RETAIL_CACHE.get(item_id)
+    if cached and time.time() - cached["t"] < _RETAIL_TTL:
+        return cached["v"]
+
+    if not image_url or not image_url.startswith("http"):
+        return {"ok": False, "reason": "no image URL available for this item"}
+
+    brand_line = f"Brand: {brand}\n" if brand else ""
+    prompt = _RETAIL_PROMPT.format(
+        title=(title or "(no title)")[:200],
+        brand_line=brand_line,
+    )
+
+    body = {
+        "model": ANTHROPIC_MODEL,
+        "max_tokens": 400,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "url", "url": image_url}},
+                {"type": "text", "text": prompt},
+            ],
+        }],
     }
 
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json=body,
+            timeout=25,
+        )
+    except requests.RequestException as exc:
+        return {"ok": False, "reason": f"network: {exc}"}
 
-_COMPS_CACHE: Dict[str, Dict[str, Any]] = {}
-_COMPS_TTL = 600  # 10 minutes
+    if not resp.ok:
+        snippet = (resp.text or "")[:240].replace("\n", " ")
+        return {
+            "ok": False,
+            "reason": f"Anthropic API {resp.status_code}: {snippet}",
+        }
 
+    try:
+        data = resp.json()
+    except ValueError:
+        return {"ok": False, "reason": "non-JSON response from Anthropic"}
 
-def _ebay_comps(title: str) -> Optional[dict]:
-    cleaned = _clean_title_for_comps(title)
-    if not cleaned:
-        return None
+    text_parts = []
+    for block in data.get("content", []) or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            text_parts.append(block.get("text", ""))
+    raw_text = "".join(text_parts).strip()
 
-    cache = _COMPS_CACHE.get(cleaned)
-    if cache and (time.time() - cache["t"] < _COMPS_TTL):
-        return cache["v"]
+    parsed = _parse_retail_json(raw_text)
+    if not parsed:
+        return {
+            "ok": False,
+            "reason": "couldn't parse retail JSON from model",
+            "raw": raw_text[:240],
+        }
 
-    result = _ebay_search_sold(cleaned)
-    if not result or result.get("count", 0) < 3:
-        short = _shorten_title(cleaned)
-        if short and short != cleaned:
-            fallback = _ebay_search_sold(short)
-            if fallback and fallback.get("count", 0) >= 3:
-                result = fallback
-
-    _COMPS_CACHE[cleaned] = {"v": result, "t": time.time()}
-    if len(_COMPS_CACHE) > 200:
-        for k in list(_COMPS_CACHE.keys())[:50]:
-            _COMPS_CACHE.pop(k, None)
+    result = {"ok": True, "model": ANTHROPIC_MODEL, **parsed}
+    _RETAIL_CACHE[item_id] = {"v": result, "t": time.time()}
+    if len(_RETAIL_CACHE) > 500:
+        for k in list(_RETAIL_CACHE.keys())[:100]:
+            _RETAIL_CACHE.pop(k, None)
     return result
 
 
@@ -781,18 +815,18 @@ def get_item_raw(item_id: int):
     return _fetch_item_detail(item_id)
 
 
-@app.get("/api/comps")
-def api_comps(title: str = Query(..., min_length=3)):
-    """Recent eBay sold-listing comps for the given item title.
+@app.get("/api/retail")
+def api_retail(item_id: int, brand: str = ""):
+    """Estimate the retail (new) price for a specific listing using
+    Claude vision. Pass `item_id` (required) and optional `brand` hint.
 
-    Best-effort scrape of public sold-listing search results. eBay can rate-
-    limit or change their HTML at any time; callers should treat a missing
-    response as "no estimate available" rather than an error.
+    Requires ANTHROPIC_API_KEY env var. Cached per item_id for 24h.
     """
-    comps = _ebay_comps(title)
-    if not comps:
-        return {"ok": False, "reason": "no comps found", "query": _clean_title_for_comps(title)}
-    return {"ok": True, **comps}
+    detail = _fetch_item_detail(item_id)
+    title = (detail.get("title") or "").strip() if isinstance(detail, dict) else ""
+    images = _extract_gallery(detail) if isinstance(detail, dict) else []
+    image_url = images[0] if images else ""
+    return _retail_estimate(item_id, title, brand or "", image_url)
 
 
 @app.post("/api/bid")
@@ -802,7 +836,6 @@ def api_place_bid(req: BidRequest):
 
 @app.get("/api/debug/upstream")
 def debug_upstream(brand: str = "Coach", page: int = 1, page_size: int = 5):
-    """Diagnostic: hit ShopGoodwill directly and return raw status + body snippet."""
     try:
         resp = _shopgoodwill_request(brand, page, page_size)
     except requests.RequestException as exc:
@@ -847,6 +880,8 @@ def health():
         "ok": True,
         "storage": "supabase" if _supabase_enabled() else "file",
         "bidding": bool(os.environ.get("SHOPGOODWILL_TOKEN")),
+        "retail_lookup": bool(ANTHROPIC_API_KEY),
+        "retail_model": ANTHROPIC_MODEL if ANTHROPIC_API_KEY else None,
     }
 
 
