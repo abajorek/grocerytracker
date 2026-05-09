@@ -143,29 +143,45 @@
 
     .gallery-pip {
       position: absolute;
-      top: calc(env(safe-area-inset-top, 12px) + 60px);
-      right: 14px;
-      background: rgba(28,28,26,0.55);
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 175px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(28,28,26,0.62);
       color: #fff;
-      padding: 6px 12px;
       border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.4px;
       z-index: 6;
-      border: none;
-      cursor: pointer;
       font-family: inherit;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.30);
       display: none;
       align-items: center;
-      gap: 6px;
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.10);
     }
     .gallery-pip.show { display: inline-flex; }
-    .gallery-pip:active { transform: scale(0.94); background: rgba(28,28,26,0.7); }
-    .gallery-pip .arrow { font-size: 14px; opacity: 0.85; }
+    .gallery-pip button {
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 20px;
+      font-weight: 500;
+      padding: 9px 16px;
+      cursor: pointer;
+      font-family: inherit;
+      line-height: 1;
+      transition: background 0.12s ease;
+    }
+    .gallery-pip button:active { background: rgba(255,255,255,0.18); }
+    .gallery-pip .count {
+      padding: 0 6px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.6px;
+      white-space: nowrap;
+      opacity: 0.95;
+    }
 
     .card-info {
       position: absolute; left: 18px; right: 84px;
@@ -509,6 +525,7 @@
     @media (max-width: 380px) {
       .card-info { right: 76px; }
       .card-brand { font-size: 21px; }
+      .gallery-pip { bottom: calc(env(safe-area-inset-bottom, 16px) + 165px); }
     }
   </style>
 </head>
@@ -763,7 +780,11 @@
         <article class="card" data-idx="${idx}" data-id="${it.id}">
           <div class="card-bg" style="background-image:url('${safeUrl}');"></div>
           <img class="card-img" src="${escapeHtml(it.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" decoding="async" onerror="this.removeAttribute('src');">
-          <button class="gallery-pip" data-pip aria-label="Next photo"><span data-pip-text>1 / 1</span><span class="arrow">›</span></button>
+          <div class="gallery-pip" data-pip>
+            <button data-pip-prev aria-label="Previous photo">‹</button>
+            <span class="count" data-pip-text>1 / 1</span>
+            <button data-pip-next aria-label="Next photo">›</button>
+          </div>
           <div class="card-shade"></div>
           <div class="burst" data-burst>♥</div>
           <div class="swipe-overlay save" data-overlay-save>♥ saved</div>
@@ -888,11 +909,18 @@
         e.stopPropagation();
         openBidSheet(item);
       });
-      const pip = card.querySelector('[data-pip]');
-      if (pip) {
-        pip.addEventListener('click', (e) => {
+      const pipPrev = card.querySelector('[data-pip-prev]');
+      const pipNext = card.querySelector('[data-pip-next]');
+      if (pipPrev) {
+        pipPrev.addEventListener('click', (e) => {
           e.stopPropagation();
-          advanceGallery(card, id);
+          advanceGallery(card, id, -1);
+        });
+      }
+      if (pipNext) {
+        pipNext.addEventListener('click', (e) => {
+          e.stopPropagation();
+          advanceGallery(card, id, 1);
         });
       }
     }
@@ -971,10 +999,12 @@
       pip.classList.add('show');
     }
 
-    function advanceGallery(card, itemId) {
+    function advanceGallery(card, itemId, dir) {
       const entry = galleryCache.get(itemId);
       if (!entry || entry.images.length < 2) return;
-      entry.index = (entry.index + 1) % entry.images.length;
+      const n = entry.images.length;
+      const step = dir || 1;
+      entry.index = ((entry.index + step) % n + n) % n;
       swapCardImage(card, entry.images[entry.index]);
       updatePip(card, entry);
     }
