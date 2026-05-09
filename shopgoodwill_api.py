@@ -517,24 +517,24 @@ _RETAIL_CACHE: Dict[int, Dict[str, Any]] = {}
 _RETAIL_TTL = 86400  # 24h
 
 _RETAIL_PROMPT = (
-    "You're identifying a thrift-store auction listing. Use BOTH the photo and "
-    "the title together to identify the *specific* product (e.g. not 'Coach "
-    "handbag' but 'Coach Signature Canvas Stripe Tote'). Then estimate the "
-    "original RETAIL price someone would pay to buy this same item NEW from the "
-    "brand or a similar new retailer today.\n\n"
+    "You are identifying a thrift-store auction listing. Use BOTH the photo "
+    "and the title together to identify the *specific* product (e.g. not "
+    "\"Coach handbag\" but \"Coach Signature Canvas Stripe Tote\"). Then "
+    "estimate the original RETAIL price someone would pay to buy this same "
+    "item NEW from the brand or a similar new retailer today.\n\n"
     "Title: {title}\n"
     "{brand_line}"
     "\n"
     "Reply with JSON only, no other text:\n"
     "{{\n"
-    '  "product": "specific product name",\n'
-    '  "retail_low": <integer dollars>,\n'
-    '  "retail_high": <integer dollars>,\n'
-    '  "confidence": "high" | "medium" | "low",\n'
-    '  "note": "one short sentence about how confident and why"\n'
+    "  \"product\": \"specific product name\",\n"
+    "  \"retail_low\": <integer dollars>,\n"
+    "  \"retail_high\": <integer dollars>,\n"
+    "  \"confidence\": \"high\" | \"medium\" | \"low\",\n"
+    "  \"note\": \"one short sentence about how confident and why\"\n"
     "}}\n\n"
-    "If you can't identify the specific item confidently, set confidence to "
-    '"low" and use a wider range based on what's visible in the photo.'
+    "If you cannot identify the specific item confidently, set confidence to "
+    "\"low\" and use a wider price range based on what is visible in the photo."
 )
 
 
