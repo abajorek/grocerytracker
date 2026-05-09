@@ -516,12 +516,10 @@
       font-size: 12px; color: var(--ink-soft); margin-top: 2px;
     }
 
-    .bid-comps {
+    /* ----- retail estimate (Claude vision) ----- */
+    .bid-retail {
       display: none;
-      align-items: baseline;
-      gap: 8px;
-      flex-wrap: wrap;
-      padding: 10px 14px;
+      padding: 12px 14px;
       background: var(--paper-2);
       border: 1px solid var(--hairline);
       border-radius: 12px;
@@ -529,24 +527,56 @@
       font-size: 13px;
       color: var(--ink-soft);
     }
-    .bid-comps.show { display: flex; }
-    .bid-comps.loading { color: var(--ink-soft); font-style: italic; }
-    .bid-comps .comps-label {
+    .bid-retail.show { display: block; }
+    .bid-retail.loading { font-style: italic; }
+    .retail-row1 {
+      display: flex; align-items: baseline;
+      gap: 8px; flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+    .retail-label {
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 1px;
       text-transform: uppercase;
       color: var(--ink-soft);
     }
-    .bid-comps .comps-median {
+    .retail-price {
       font-weight: 700;
-      font-size: 16px;
+      font-size: 18px;
       color: var(--ink);
       letter-spacing: -0.3px;
+      font-family: var(--display);
+      font-variation-settings: 'opsz' 60;
     }
-    .bid-comps .comps-range {
+    .retail-conf {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--paper-3);
+      color: var(--ink-soft);
+    }
+    .retail-conf-high { background: var(--success-bg); color: var(--success-text); }
+    .retail-conf-medium { background: var(--paper-3); color: var(--ink-soft); }
+    .retail-conf-low { background: var(--peach); color: var(--coral-deep); }
+    .retail-product {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+    .retail-note {
       font-size: 11px;
       color: var(--ink-soft);
+      line-height: 1.4;
+    }
+    .retail-empty {
+      font-size: 12px;
+      color: var(--ink-soft);
+      line-height: 1.45;
     }
 
     .bid-presets {
@@ -718,7 +748,7 @@
           <div class="bid-current-text" id="bidCurrent"></div>
         </div>
       </div>
-      <div class="bid-comps" id="bidComps"></div>
+      <div class="bid-retail" id="bidRetail"></div>
       <div class="bid-presets" id="bidPresets"></div>
       <input id="bidCustom" type="number" inputmode="decimal" step="0.01" placeholder="Custom amount">
       <div class="bid-notice" id="bidNotice"></div>
@@ -758,6 +788,7 @@
     const detailFetched = new Set();
 
     const fmtPrice = n => `$${(Number(n) || 0).toFixed(2)}`;
+    const fmtPriceWhole = n => `$${Math.round(Number(n) || 0)}`;
     const isUrgent = s => s > 0 && s < 3600;
     function fmtTime(seconds) {
       if (!Number.isFinite(seconds) || seconds <= 0) return 'Ended';
@@ -1206,7 +1237,6 @@
       e.stopPropagation();
       const wasZoomed = lightboxStage.classList.toggle('zoomed');
       if (wasZoomed) {
-        // After layout updates, center the scroll on the tap point.
         requestAnimationFrame(() => {
           const stageRect = lightboxStage.getBoundingClientRect();
           const relX = (e.clientX - stageRect.left) / stageRect.width;
@@ -1217,7 +1247,6 @@
       }
     });
     lightboxStage.addEventListener('click', (e) => {
-      // Tapping the dark area outside the photo closes.
       if (e.target === lightboxStage) closeLightbox();
     });
 
@@ -1360,46 +1389,62 @@
       };
     }
 
-    // ----- bid sheet -----
+    // ----- bid sheet + retail estimate -----
 
     let bidContext = null;
 
-    function setBidComps(state, payload) {
-      const el = document.getElementById('bidComps');
+    function setBidRetail(state, payload) {
+      const el = document.getElementById('bidRetail');
       el.classList.remove('show', 'loading');
       if (state === 'loading') {
         el.classList.add('show', 'loading');
-        el.textContent = 'Looking up recent eBay sold prices…';
+        el.innerHTML = `<span class="retail-label">Retail (new)</span> <span>Looking up…</span>`;
         return;
       }
-      if (state === 'none') {
+      if (state === 'none' || state === 'error') {
         el.classList.add('show');
-        el.innerHTML = `<span class="comps-label">eBay sold</span><span class="comps-range">No recent comps found for this item.</span>`;
+        const reason = (payload && payload.reason) || 'No estimate available.';
+        el.innerHTML = `
+          <div class="retail-row1"><span class="retail-label">Retail (new)</span></div>
+          <div class="retail-empty">${escapeHtml(reason)}</div>`;
         return;
       }
-      if (state === 'error') {
-        el.classList.add('show');
-        el.innerHTML = `<span class="comps-label">eBay sold</span><span class="comps-range">Couldn't reach eBay just now.</span>`;
-        return;
-      }
+      // ok
       el.classList.add('show');
+      const lo = Number(payload.retail_low) || 0;
+      const hi = Number(payload.retail_high) || 0;
+      const conf = (payload.confidence || 'medium').toLowerCase();
+      let priceStr = 'Unknown';
+      if (lo && hi && Math.abs(lo - hi) > 0.01) {
+        priceStr = `${fmtPriceWhole(lo)}–${fmtPriceWhole(hi)}`;
+      } else if (lo || hi) {
+        priceStr = fmtPriceWhole(lo || hi);
+      }
+      const product = payload.product || '';
+      const note = payload.note || '';
       el.innerHTML = `
-        <span class="comps-label">eBay sold</span>
-        <span class="comps-median">${fmtPrice(payload.median)}</span>
-        <span class="comps-range">median · ${fmtPrice(payload.low)}–${fmtPrice(payload.high)} · ${payload.count} sales</span>`;
+        <div class="retail-row1">
+          <span class="retail-label">Retail (new)</span>
+          <span class="retail-price">${priceStr}</span>
+          <span class="retail-conf retail-conf-${conf}">${conf}</span>
+        </div>
+        ${product ? `<div class="retail-product">${escapeHtml(product)}</div>` : ''}
+        ${note ? `<div class="retail-note">${escapeHtml(note)}</div>` : ''}
+      `;
     }
 
-    async function loadCompsFor(title) {
-      setBidComps('loading');
+    async function loadRetailFor(itemId, brand) {
+      setBidRetail('loading');
       try {
-        const data = await apiGet(`/api/comps?title=${encodeURIComponent(title)}`);
-        if (!data.ok) {
-          setBidComps('none');
+        const url = `/api/retail?item_id=${itemId}` + (brand ? `&brand=${encodeURIComponent(brand)}` : '');
+        const data = await apiGet(url);
+        if (!data || !data.ok) {
+          setBidRetail('none', data || {});
           return;
         }
-        setBidComps('ok', data);
+        setBidRetail('ok', data);
       } catch (e) {
-        setBidComps('error');
+        setBidRetail('error', { reason: (e && e.message) || String(e) });
       }
     }
 
@@ -1451,8 +1496,8 @@
       confirmBtn.textContent = 'Place bid';
       document.getElementById('bidModalBg').classList.add('open');
 
-      // Lazy-fetch comps. Use the listing title (specific to this item).
-      loadCompsFor(item.title);
+      // Lazy retail estimate (Claude vision). Uses item_id; brand is hint.
+      loadRetailFor(item.id, item.brand);
     }
 
     function selectBidAmount(amount, btnEl) {
