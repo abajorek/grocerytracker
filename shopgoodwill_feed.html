@@ -120,6 +120,7 @@
       transform: scale(1.08);
       z-index: 0;
       will-change: transform;
+      transition: opacity 0.35s ease;
     }
     .card-img {
       position: absolute; inset: 0;
@@ -129,8 +130,9 @@
       z-index: 1;
       filter: contrast(1.04) saturate(1.06);
       image-rendering: -webkit-optimize-contrast;
-      transition: opacity 0.4s ease, transform 0.2s ease;
+      transition: opacity 0.35s ease, transform 0.2s ease;
     }
+    .card-img.swapping { opacity: 0.4; }
     .card-shade {
       position: absolute; left: 0; right: 0; bottom: 0;
       height: 55%;
@@ -138,6 +140,32 @@
       pointer-events: none;
       z-index: 2;
     }
+
+    .gallery-pip {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 12px) + 60px);
+      right: 14px;
+      background: rgba(28,28,26,0.55);
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      z-index: 6;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+    .gallery-pip.show { display: inline-flex; }
+    .gallery-pip:active { transform: scale(0.94); background: rgba(28,28,26,0.7); }
+    .gallery-pip .arrow { font-size: 14px; opacity: 0.85; }
 
     .card-info {
       position: absolute; left: 18px; right: 84px;
@@ -554,6 +582,9 @@
       exhausted: false,
     };
 
+    const galleryCache = new Map(); // itemId -> { images: [...], index: 0 }
+    const detailFetched = new Set(); // itemIds already fetched (success or fail)
+
     const fmtPrice = n => `$${(Number(n) || 0).toFixed(2)}`;
     const isUrgent = s => s > 0 && s < 3600;
     function fmtTime(seconds) {
@@ -569,8 +600,8 @@
       return String(s == null ? '' : s).replace(/[&<>"']/g,
         c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
-    function escapeUrl(s) {
-      return String(s == null ? '' : s).replace(/["'<>\\\s)(]/g, encodeURIComponent);
+    function safeUrlForCss(u) {
+      return encodeURI(u || '').replace(/'/g, '%27');
     }
 
     function setBidNotice(text, kind) {
@@ -712,7 +743,13 @@
         return;
       }
       feed.innerHTML = state.items.map(cardHTML).join('');
-      feed.querySelectorAll('.card[data-id]').forEach(attachGestures);
+      feed.querySelectorAll('.card[data-id]').forEach(card => {
+        attachGestures(card);
+        detailObserver.observe(card);
+        // Apply any cached gallery (e.g. on re-render)
+        const id = parseInt(card.dataset.id, 10);
+        if (galleryCache.has(id)) applyGallery(card, id);
+      });
       observeLastCard();
     }
 
@@ -721,11 +758,12 @@
       const heart = saved ? '♥' : '♡';
       const heartCls = saved ? 'action-btn fav active' : 'action-btn fav';
       const urgent = isUrgent(it.seconds_left) ? ' urgent' : '';
-      const safeUrl = encodeURI(it.image_url || '').replace(/'/g, '%27');
+      const safeUrl = safeUrlForCss(it.image_url);
       return `
         <article class="card" data-idx="${idx}" data-id="${it.id}">
           <div class="card-bg" style="background-image:url('${safeUrl}');"></div>
           <img class="card-img" src="${escapeHtml(it.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" decoding="async" onerror="this.removeAttribute('src');">
+          <button class="gallery-pip" data-pip aria-label="Next photo"><span data-pip-text>1 / 1</span><span class="arrow">›</span></button>
           <div class="card-shade"></div>
           <div class="burst" data-burst>♥</div>
           <div class="swipe-overlay save" data-overlay-save>♥ saved</div>
@@ -850,6 +888,13 @@
         e.stopPropagation();
         openBidSheet(item);
       });
+      const pip = card.querySelector('[data-pip]');
+      if (pip) {
+        pip.addEventListener('click', (e) => {
+          e.stopPropagation();
+          advanceGallery(card, id);
+        });
+      }
     }
 
     function fireBurst(el) {
@@ -863,6 +908,75 @@
       el.style.opacity = '';
       el.classList.add('show');
       setTimeout(() => el.classList.remove('show'), 650);
+    }
+
+    // ----- gallery (lazy fetch full-resolution images per card) -----
+
+    const detailObserver = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const id = parseInt(e.target.dataset.id, 10);
+          if (id && !detailFetched.has(id)) fetchDetailFor(e.target, id);
+        }
+      });
+    }, { threshold: 0.6 });
+
+    async function fetchDetailFor(card, itemId) {
+      detailFetched.add(itemId);
+      try {
+        const data = await apiGet(`/api/item/${itemId}`);
+        const images = (data && data.images) || [];
+        if (!images.length) return;
+        galleryCache.set(itemId, { images, index: 0 });
+        applyGallery(card, itemId);
+      } catch (e) {
+        // Detail fetch is best-effort; silently leave the search-API image in place.
+        console.warn('detail fetch failed', itemId, e);
+      }
+    }
+
+    function applyGallery(card, itemId) {
+      const entry = galleryCache.get(itemId);
+      if (!entry || !entry.images.length) return;
+      swapCardImage(card, entry.images[entry.index]);
+      updatePip(card, entry);
+    }
+
+    function swapCardImage(card, url) {
+      if (!url) return;
+      const img = card.querySelector('.card-img');
+      const bg = card.querySelector('.card-bg');
+      if (!img) return;
+      if (img.src === url) return;
+      const pre = new Image();
+      img.classList.add('swapping');
+      pre.onload = () => {
+        img.src = url;
+        if (bg) bg.style.backgroundImage = `url('${safeUrlForCss(url)}')`;
+        requestAnimationFrame(() => img.classList.remove('swapping'));
+      };
+      pre.onerror = () => img.classList.remove('swapping');
+      pre.src = url;
+    }
+
+    function updatePip(card, entry) {
+      const pip = card.querySelector('[data-pip]');
+      if (!pip) return;
+      if (!entry || entry.images.length < 2) {
+        pip.classList.remove('show');
+        return;
+      }
+      const text = pip.querySelector('[data-pip-text]');
+      if (text) text.textContent = `${entry.index + 1} / ${entry.images.length}`;
+      pip.classList.add('show');
+    }
+
+    function advanceGallery(card, itemId) {
+      const entry = galleryCache.get(itemId);
+      if (!entry || entry.images.length < 2) return;
+      entry.index = (entry.index + 1) % entry.images.length;
+      swapCardImage(card, entry.images[entry.index]);
+      updatePip(card, entry);
     }
 
     async function toggleFav(item, card) {
@@ -905,7 +1019,7 @@
           return;
         }
         feed.innerHTML = favs.map((f, idx) => {
-          const safeUrl = encodeURI(f.image_url || '').replace(/'/g, '%27');
+          const safeUrl = safeUrlForCss(f.image_url);
           return `
           <article class="card">
             <div class="card-bg" style="background-image:url('${safeUrl}');"></div>

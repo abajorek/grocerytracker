@@ -25,7 +25,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 try:
     from zoneinfo import ZoneInfo
@@ -316,6 +316,107 @@ def _place_bid(item_id: int, amount: float, quantity: int = 1) -> dict:
         return {"raw": (resp.text or "")[:300]}
 
 
+_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".gif")
+_IMAGE_LIST_KEYS = (
+    "imageURLs", "imageUrls", "imageURLString", "imageUrlString",
+    "images", "itemImages", "additionalImages", "imageList", "galleryImages",
+    "itemImageUrls", "itemImageURLs",
+)
+_IMAGE_SCALAR_KEYS = (
+    "imageURL", "imageUrl", "imageName", "image",
+    "largeImageURL", "largeImageUrl", "primaryImage",
+)
+
+
+def _looks_like_image_path(value: str) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    lower = value.lower().split("?", 1)[0]
+    return lower.endswith(_IMAGE_SUFFIXES)
+
+
+def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
+    """Walk a ShopGoodwill item-detail payload and pull out every image URL.
+
+    The shape varies; we treat any field whose name contains "image" or whose
+    value looks like an image filename as a candidate. Order is preserved
+    (the main hero shot tends to come first) and duplicates are dropped.
+    """
+    if not isinstance(detail, dict):
+        return []
+    image_server = (
+        detail.get("imageServer")
+        or detail.get("imageServerLocation")
+        or image_server_default
+        or FALLBACK_IMAGE_BASE
+    )
+    seen: set = set()
+    out: List[str] = []
+
+    def push(raw: Any):
+        if not isinstance(raw, str):
+            return
+        url = raw.strip()
+        if not url:
+            return
+        if not url.startswith("http"):
+            if not _looks_like_image_path(url):
+                return
+            url = _build_image_url(image_server, url)
+        if url in seen:
+            return
+        seen.add(url)
+        out.append(url)
+
+    for key in _IMAGE_SCALAR_KEYS:
+        if key in detail:
+            push(detail.get(key))
+
+    for key in _IMAGE_LIST_KEYS:
+        items = detail.get(key)
+        if isinstance(items, str) and items:
+            for piece in items.split(","):
+                push(piece)
+        elif isinstance(items, list):
+            for it in items:
+                if isinstance(it, str):
+                    push(it)
+                elif isinstance(it, dict):
+                    for k in ("imageURL", "imageUrl", "url", "fileName", "name", "src"):
+                        if k in it:
+                            push(it[k])
+                            break
+
+    return out
+
+
+def _fetch_item_detail(item_id: int) -> dict:
+    headers = dict(DEFAULT_HEADERS)
+    token = os.environ.get("SHOPGOODWILL_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        resp = requests.get(
+            f"{SHOPGOODWILL_BASE}/itemDetail/GetItemDetailModelByItemId/{int(item_id)}",
+            headers=headers, timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
+    if not resp.ok:
+        body = (resp.text or "")[:240].replace("\n", " ")
+        raise HTTPException(
+            status_code=502,
+            detail=f"ShopGoodwill returned {resp.status_code}: {body}",
+        )
+    try:
+        return resp.json()
+    except ValueError:
+        snippet = (resp.text or "")[:240].replace("\n", " ")
+        raise HTTPException(
+            status_code=502, detail=f"non-JSON ({resp.status_code}): {snippet}"
+        )
+
+
 # ---------- storage (Supabase REST or local file) ----------
 
 def _supabase_enabled() -> bool:
@@ -439,6 +540,20 @@ def get_feed(
         if normalized is not None:
             items.append(normalized)
     return items
+
+
+@app.get("/api/item/{item_id}")
+def get_item(item_id: int):
+    detail = _fetch_item_detail(item_id)
+    images = _extract_gallery(detail)
+    title = (detail.get("title") or detail.get("itemTitle") or "").strip() if isinstance(detail, dict) else ""
+    return {"id": item_id, "title": title, "images": images}
+
+
+@app.get("/api/item/{item_id}/raw")
+def get_item_raw(item_id: int):
+    """Diagnostic: return the upstream item detail payload as-is."""
+    return _fetch_item_detail(item_id)
 
 
 @app.post("/api/bid")
