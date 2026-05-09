@@ -112,18 +112,31 @@
       background: var(--paper-2);
       overflow: hidden;
     }
+    .card-bg {
+      position: absolute; inset: -8%;
+      background-size: cover;
+      background-position: center;
+      filter: blur(48px) saturate(1.35) brightness(0.92);
+      transform: scale(1.08);
+      z-index: 0;
+      will-change: transform;
+    }
     .card-img {
       position: absolute; inset: 0;
       width: 100%; height: 100%;
-      object-fit: cover;
-      background: var(--paper-2);
+      object-fit: contain;
+      object-position: center;
+      z-index: 1;
+      filter: contrast(1.04) saturate(1.06);
+      image-rendering: -webkit-optimize-contrast;
       transition: opacity 0.4s ease, transform 0.2s ease;
     }
     .card-shade {
       position: absolute; left: 0; right: 0; bottom: 0;
-      height: 60%;
-      background: linear-gradient(to top, rgba(28,28,26,0.92), rgba(28,28,26,0.45) 45%, transparent);
+      height: 55%;
+      background: linear-gradient(to top, rgba(28,28,26,0.85), rgba(28,28,26,0.35) 50%, transparent);
       pointer-events: none;
+      z-index: 2;
     }
 
     .card-info {
@@ -317,6 +330,7 @@
       color: var(--ink);
       text-align: center;
       padding: 24px;
+      z-index: 3;
     }
     .center-msg h3 {
       font-family: 'DM Serif Display', serif;
@@ -555,6 +569,9 @@
       return String(s == null ? '' : s).replace(/[&<>"']/g,
         c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
+    function escapeUrl(s) {
+      return String(s == null ? '' : s).replace(/["'<>\\\s)(]/g, encodeURIComponent);
+    }
 
     function setBidNotice(text, kind) {
       const el = document.getElementById('bidNotice');
@@ -704,9 +721,11 @@
       const heart = saved ? '♥' : '♡';
       const heartCls = saved ? 'action-btn fav active' : 'action-btn fav';
       const urgent = isUrgent(it.seconds_left) ? ' urgent' : '';
+      const safeUrl = encodeURI(it.image_url || '').replace(/'/g, '%27');
       return `
         <article class="card" data-idx="${idx}" data-id="${it.id}">
-          <img class="card-img" src="${escapeHtml(it.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" onerror="this.removeAttribute('src');">
+          <div class="card-bg" style="background-image:url('${safeUrl}');"></div>
+          <img class="card-img" src="${escapeHtml(it.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" decoding="async" onerror="this.removeAttribute('src');">
           <div class="card-shade"></div>
           <div class="burst" data-burst>♥</div>
           <div class="swipe-overlay save" data-overlay-save>♥ saved</div>
@@ -885,9 +904,12 @@
           feed.innerHTML = `<div class="card"><div class="center-msg"><div><h3>Nothing saved yet</h3><p>Swipe a card right to save it here.</p></div></div></div>`;
           return;
         }
-        feed.innerHTML = favs.map((f, idx) => `
+        feed.innerHTML = favs.map((f, idx) => {
+          const safeUrl = encodeURI(f.image_url || '').replace(/'/g, '%27');
+          return `
           <article class="card">
-            <img class="card-img" src="${escapeHtml(f.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" onerror="this.removeAttribute('src');">
+            <div class="card-bg" style="background-image:url('${safeUrl}');"></div>
+            <img class="card-img" src="${escapeHtml(f.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" decoding="async" onerror="this.removeAttribute('src');">
             <div class="card-shade"></div>
             <div class="card-info">
               <div class="card-brand">${escapeHtml(f.brand || 'Saved')}</div>
@@ -896,7 +918,8 @@
                 <a class="price-tag" href="${escapeHtml(f.listing_url)}" target="_blank" rel="noopener" style="text-decoration:none;">Open ↗</a>
               </div>
             </div>
-          </article>`).join('');
+          </article>`;
+        }).join('');
       } catch (e) {
         renderError(e);
       }
