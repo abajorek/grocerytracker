@@ -167,8 +167,24 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
     )
 
 
-def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40) -> List[dict]:
-    payload = {
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Content-Type": "application/json",
+    "Origin": "https://shopgoodwill.com",
+    "Referer": "https://shopgoodwill.com/",
+    "Sec-Fetch-Site": "same-site",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
+}
+
+
+def _shopgoodwill_payload(query: str, page: int, page_size: int) -> dict:
+    return {
         "isSize": False,
         "isWeddingCatagory": "false",
         "isMultipleCategoryIds": False,
@@ -193,26 +209,42 @@ def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40) -> List
         "categoryLevelNo": "1",
         "isMultipleSearch": False,
     }
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json",
-        "Origin": "https://shopgoodwill.com",
-        "Referer": "https://shopgoodwill.com/",
-    }
+
+
+def _shopgoodwill_request(query: str, page: int, page_size: int) -> requests.Response:
+    headers = dict(DEFAULT_HEADERS)
     token = os.environ.get("SHOPGOODWILL_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    return requests.post(
+        f"{SHOPGOODWILL_BASE}/Search/ItemListing",
+        json=_shopgoodwill_payload(query, page, page_size),
+        headers=headers,
+        timeout=20,
+    )
+
+
+def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40) -> List[dict]:
+    try:
+        resp = _shopgoodwill_request(query, page, page_size)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
+
+    if not resp.ok:
+        body = (resp.text or "")[:240].replace("\n", " ")
+        raise HTTPException(
+            status_code=502,
+            detail=f"ShopGoodwill returned {resp.status_code}: {body}",
+        )
 
     try:
-        resp = requests.post(
-            f"{SHOPGOODWILL_BASE}/Search/ItemListing",
-            json=payload, headers=headers, timeout=20,
-        )
-        resp.raise_for_status()
         data = resp.json()
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"ShopGoodwill upstream error: {exc}")
+    except ValueError:
+        snippet = (resp.text or "")[:240].replace("\n", " ")
+        raise HTTPException(
+            status_code=502,
+            detail=f"ShopGoodwill returned non-JSON ({resp.status_code}): {snippet}",
+        )
 
     if isinstance(data, dict):
         if "searchResults" in data and isinstance(data["searchResults"], dict):
@@ -344,6 +376,22 @@ def get_feed(
         if normalized is not None:
             items.append(normalized)
     return items
+
+
+@app.get("/api/debug/upstream")
+def debug_upstream(brand: str = "Coach", page: int = 1, page_size: int = 5):
+    """Diagnostic: hit ShopGoodwill directly and return raw status + body snippet."""
+    try:
+        resp = _shopgoodwill_request(brand, page, page_size)
+    except requests.RequestException as exc:
+        return {"network_error": str(exc)}
+    snippet = (resp.text or "")[:600]
+    return {
+        "status": resp.status_code,
+        "content_type": resp.headers.get("Content-Type", ""),
+        "body_snippet": snippet,
+        "has_token": bool(os.environ.get("SHOPGOODWILL_TOKEN")),
+    }
 
 
 @app.get("/api/brands")
