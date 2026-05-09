@@ -105,7 +105,7 @@
       width: 100%; height: 100%;
       object-fit: cover;
       background: var(--cream-2);
-      transition: opacity 0.4s ease;
+      transition: opacity 0.4s ease, transform 0.2s ease;
     }
     .card-shade {
       position: absolute; left: 0; right: 0; bottom: 0;
@@ -198,6 +198,28 @@
       80%  { transform: translate(-50%,-50%) scale(1.0); opacity: 0.9; }
       100% { transform: translate(-50%,-50%) scale(0.7); opacity: 0; }
     }
+
+    .swipe-overlay {
+      position: absolute;
+      top: 50%;
+      padding: 18px 30px;
+      border-radius: 999px;
+      font-family: 'DM Serif Display', serif;
+      font-size: 26px;
+      color: var(--cream);
+      pointer-events: none;
+      z-index: 9;
+      opacity: 0;
+      transform: translateY(-50%) scale(0.7);
+      transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .swipe-overlay.save { left: 24px; background: var(--rose); border: 2px solid var(--rose-deep); }
+    .swipe-overlay.bid  { right: 24px; background: var(--sage); border: 2px solid var(--sage-deep); }
+    .swipe-overlay.show { opacity: 1; transform: translateY(-50%) scale(1); }
+    .swipe-overlay.peek { opacity: 0.7; }
 
     .drawer-bg {
       position: fixed; inset: 0; z-index: 40;
@@ -350,7 +372,7 @@
       <div class="center-msg">
         <div>
           <h3>Pick a brand</h3>
-          <p>Tap a chip up top to start scrolling. Flick up for the next find. Double-tap to save.</p>
+          <p>Tap a chip up top to start. Flick up for the next find. Swipe right to save ♥ · swipe left to bid ↗</p>
         </div>
       </div>
     </div>
@@ -374,6 +396,10 @@
   </div>
 
   <script>
+    const SWIPE_THRESHOLD = 70;
+    const SWIPE_VERTICAL_TOLERANCE = 60;
+    const SWIPE_PEEK_DISTANCE = 30;
+
     const state = {
       brands: [],
       activeBrand: null,
@@ -403,7 +429,11 @@
 
     async function apiGet(path) {
       const r = await fetch(path);
-      if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
+      if (!r.ok) {
+        let detail = String(r.status);
+        try { const j = await r.json(); if (j && j.detail) detail = j.detail; } catch {}
+        throw new Error(`GET ${path} → ${detail}`);
+      }
       return r.json();
     }
     async function apiSend(path, method, body) {
@@ -477,7 +507,7 @@
           <div class="center-msg">
             <div>
               <h3>Pulling ${escapeHtml(brand)} finds…</h3>
-              <p>Flick up to scroll. Double-tap to save. Swipe right or tap “i” for details.</p>
+              <p>Flick up for next · swipe → to save · swipe ← to bid</p>
               <div class="dots"><span></span><span></span><span></span></div>
             </div>
           </div>
@@ -536,6 +566,8 @@
           <img class="card-img" src="${escapeHtml(it.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" onerror="this.removeAttribute('src');">
           <div class="card-shade"></div>
           <div class="burst" data-burst>♥</div>
+          <div class="swipe-overlay save" data-overlay-save>♥ saved</div>
+          <div class="swipe-overlay bid"  data-overlay-bid>↗ bid</div>
           <div class="card-info">
             <div class="card-brand">${escapeHtml(it.brand)}</div>
             <div class="card-title">${escapeHtml(it.title)}</div>
@@ -568,6 +600,9 @@
       const item = state.items.find(x => x.id === id);
       if (!item) return;
       const burst = card.querySelector('[data-burst]');
+      const img = card.querySelector('.card-img');
+      const overlaySave = card.querySelector('[data-overlay-save]');
+      const overlayBid  = card.querySelector('[data-overlay-bid]');
 
       let lastTap = 0;
       card.addEventListener('click', (e) => {
@@ -580,19 +615,65 @@
         lastTap = now;
       });
 
-      let startX = 0, startY = 0, tracking = false;
+      let startX = 0, startY = 0, tracking = false, horizontal = false;
       card.addEventListener('touchstart', (e) => {
         if (e.target.closest('button,a')) return;
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         tracking = true;
+        horizontal = false;
       }, { passive: true });
+
+      card.addEventListener('touchmove', (e) => {
+        if (!tracking) return;
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        if (!horizontal && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+          horizontal = true;
+        }
+        if (!horizontal) return;
+        const peek = Math.max(-1, Math.min(1, dx / 140));
+        if (img) img.style.transform = `translateX(${dx * 0.18}px)`;
+        if (dx > SWIPE_PEEK_DISTANCE) {
+          overlaySave.classList.add('peek');
+          overlaySave.style.opacity = String(Math.min(0.9, peek));
+          overlayBid.classList.remove('peek', 'show');
+          overlayBid.style.opacity = '';
+        } else if (dx < -SWIPE_PEEK_DISTANCE) {
+          overlayBid.classList.add('peek');
+          overlayBid.style.opacity = String(Math.min(0.9, -peek));
+          overlaySave.classList.remove('peek', 'show');
+          overlaySave.style.opacity = '';
+        } else {
+          overlaySave.classList.remove('peek', 'show');
+          overlayBid.classList.remove('peek', 'show');
+          overlaySave.style.opacity = '';
+          overlayBid.style.opacity = '';
+        }
+      }, { passive: true });
+
       card.addEventListener('touchend', (e) => {
         if (!tracking) return;
+        tracking = false;
         const dx = e.changedTouches[0].clientX - startX;
         const dy = e.changedTouches[0].clientY - startY;
-        if (dx > 70 && Math.abs(dy) < 60) openDrawer(item);
-        tracking = false;
+
+        if (img) img.style.transform = '';
+        overlaySave.classList.remove('peek');
+        overlayBid.classList.remove('peek');
+        overlaySave.style.opacity = '';
+        overlayBid.style.opacity = '';
+
+        if (Math.abs(dy) > SWIPE_VERTICAL_TOLERANCE) return;
+
+        if (dx > SWIPE_THRESHOLD) {
+          if (!state.favorites.has(item.id)) toggleFav(item, card);
+          fireBurst(burst);
+          flashOverlay(overlaySave);
+        } else if (dx < -SWIPE_THRESHOLD) {
+          flashOverlay(overlayBid);
+          setTimeout(() => window.open(item.listing_url, '_blank', 'noopener'), 140);
+        }
       }, { passive: true });
 
       card.querySelector('[data-fav]').addEventListener('click', (e) => {
@@ -609,6 +690,13 @@
       el.classList.remove('go');
       void el.offsetWidth;
       el.classList.add('go');
+    }
+
+    function flashOverlay(el) {
+      el.classList.remove('peek');
+      el.style.opacity = '';
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 650);
     }
 
     async function toggleFav(item, card) {
@@ -647,7 +735,7 @@
         const favs = await apiGet('/api/favorites');
         const feed = document.getElementById('feed');
         if (!favs.length) {
-          feed.innerHTML = `<div class="card"><div class="center-msg"><div><h3>Nothing saved yet</h3><p>Double-tap any card to save it here.</p></div></div></div>`;
+          feed.innerHTML = `<div class="card"><div class="center-msg"><div><h3>Nothing saved yet</h3><p>Swipe a card to the right to save it here.</p></div></div></div>`;
           return;
         }
         feed.innerHTML = favs.map((f, idx) => `
