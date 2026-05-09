@@ -41,7 +41,7 @@ from pydantic import BaseModel
 
 
 SHOPGOODWILL_BASE = "https://buyerapi.shopgoodwill.com/api"
-FALLBACK_IMAGE_BASE = "https://shopgoodwillimages.azureedge.net/AuctionImages"
+FALLBACK_IMAGE_BASE = "https://shopgoodwillimages.azureedge.net/production/"
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
@@ -124,6 +124,9 @@ def _write_json(path: Path, value):
 def _build_image_url(image_server: str, image_path: str) -> str:
     if not image_path:
         return ""
+    # ShopGoodwill stores Windows-style paths (e.g. "32\\Items\\2025-09-05\\foo.png");
+    # the Azure CDN expects forward slashes.
+    image_path = image_path.replace("\\", "/").strip()
     if image_path.startswith("http://") or image_path.startswith("https://"):
         return image_path
     base = (image_server or FALLBACK_IMAGE_BASE).rstrip("/")
@@ -154,6 +157,10 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
         or raw.get("image")
         or ""
     )
+    # imageUrlString in some responses is a `;`-delimited list of paths;
+    # keep just the first one for the search-card thumbnail.
+    if isinstance(image_path, str) and ";" in image_path:
+        image_path = image_path.split(";", 1)[0]
     image_url = _build_image_url(raw.get("imageServer", "") or "", image_path)
     if not image_url:
         return None
@@ -317,11 +324,16 @@ def _place_bid(item_id: int, amount: float, quantity: int = 1) -> dict:
 
 
 _IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".gif")
+# Fields that may carry a *list* of images (semicolon- or comma-delimited
+# string, OR a JSON array of strings/dicts).
 _IMAGE_LIST_KEYS = (
-    "imageURLs", "imageUrls", "imageURLString", "imageUrlString",
+    "imageUrlString", "imageURLString",  # primary: full-size paths, ;-delimited
+    "imageURLs", "imageUrls",
     "images", "itemImages", "additionalImages", "imageList", "galleryImages",
     "itemImageUrls", "itemImageURLs",
 )
+# Fields that carry a single image path. Note: thumbnailUrlString is
+# excluded; we only use the full-size imageUrlString for the gallery.
 _IMAGE_SCALAR_KEYS = (
     "imageURL", "imageUrl", "imageName", "image",
     "largeImageURL", "largeImageUrl", "primaryImage",
@@ -335,12 +347,29 @@ def _looks_like_image_path(value: str) -> bool:
     return lower.endswith(_IMAGE_SUFFIXES)
 
 
-def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
-    """Walk a ShopGoodwill item-detail payload and pull out every image URL.
+def _split_image_string(value: str) -> List[str]:
+    """ShopGoodwill delimits multi-image strings with `;`. A few legacy
+    payloads use `,`. Split on either, drop empties."""
+    if not value:
+        return []
+    pieces = value.replace(",", ";").split(";")
+    return [p for p in (s.strip() for s in pieces) if p]
 
-    The shape varies; we treat any field whose name contains "image" or whose
-    value looks like an image filename as a candidate. Order is preserved
-    (the main hero shot tends to come first) and duplicates are dropped.
+
+def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
+    """Walk a ShopGoodwill item-detail payload and pull out every full-size
+    image URL.
+
+    Real-world payload (item 261359248) carries paths in `imageUrlString`
+    delimited by `;`, with Windows-style backslashes, e.g.::
+
+        "32\\Items\\2025-09-05\\abc_09051.png;32\\Items\\2025-09-05\\abc_09052.png;..."
+
+    `imageServer` in that response is
+    "https://shopgoodwillimages.azureedge.net/production/". The Azure CDN
+    requires forward slashes; _build_image_url normalizes them.
+    `thumbnailUrlString` exists too but holds *smaller* `t1.jpeg`-style
+    files, so we deliberately skip it here.
     """
     if not isinstance(detail, dict):
         return []
@@ -363,6 +392,8 @@ def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
             if not _looks_like_image_path(url):
                 return
             url = _build_image_url(image_server, url)
+        else:
+            url = url.replace("\\", "/")
         if url in seen:
             return
         seen.add(url)
@@ -374,8 +405,8 @@ def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
 
     for key in _IMAGE_LIST_KEYS:
         items = detail.get(key)
-        if isinstance(items, str) and items:
-            for piece in items.split(","):
+        if isinstance(items, str):
+            for piece in _split_image_string(items):
                 push(piece)
         elif isinstance(items, list):
             for it in items:
