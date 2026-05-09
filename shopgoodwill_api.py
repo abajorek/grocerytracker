@@ -2,18 +2,22 @@
 """
 Sarah's Thrift Feed - ShopGoodwill TikTok-style backend
 
-Wraps ShopGoodwill's public ItemListing search endpoint, normalizes the
-response into something the swipe feed can render, and persists pinned
-brands + saved listings to a local JSON file. Serves the static frontend
-from the same origin so the browser doesn't need CORS gymnastics.
+Wraps ShopGoodwill's public ItemListing search and stores pinned brands +
+saved listings. Storage gracefully degrades:
 
-Run:
+  * If SUPABASE_URL + SUPABASE_KEY are set, persists via Supabase's REST
+    API (PostgREST). No Postgres driver required.
+  * Otherwise falls back to local JSON files in ./data/ (dev mode).
+
+Local:
     pip install -r requirements.txt
     python shopgoodwill_api.py
-    open http://127.0.0.1:8765
 
-If the public endpoint rejects anonymous traffic, set SHOPGOODWILL_TOKEN
-in the env to a JWT lifted from a logged-in browser session.
+Production (Render / Railway / Fly):
+    uvicorn shopgoodwill_api:app --host 0.0.0.0 --port $PORT
+
+If anonymous ShopGoodwill search starts returning 401, set
+SHOPGOODWILL_TOKEN to a JWT lifted from a logged-in browser session.
 """
 
 import json
@@ -25,7 +29,7 @@ from typing import List, Optional
 try:
     from zoneinfo import ZoneInfo
     _PACIFIC = ZoneInfo("America/Los_Angeles")
-except Exception:  # pragma: no cover - zoneinfo always available on 3.9+
+except Exception:  # pragma: no cover
     _PACIFIC = timezone.utc
 
 import requests
@@ -44,6 +48,8 @@ DATA_DIR.mkdir(exist_ok=True)
 FAVORITES_FILE = DATA_DIR / "favorites.json"
 BRANDS_FILE = DATA_DIR / "brands.json"
 FRONTEND_FILE = ROOT / "shopgoodwill_feed.html"
+MANIFEST_FILE = ROOT / "manifest.webmanifest"
+ICON_FILE = ROOT / "icon.svg"
 
 DEFAULT_BRANDS = [
     "Coach",
@@ -55,6 +61,9 @@ DEFAULT_BRANDS = [
     "Eileen Fisher",
     "Lululemon",
 ]
+
+SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or ""
 
 
 class FeedItem(BaseModel):
@@ -78,10 +87,10 @@ class Favorite(BaseModel):
     image_url: str
     listing_url: str
     saved_at: str
+    brand: Optional[str] = ""
 
 
 app = FastAPI(title="Sarah's Thrift Feed")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -89,6 +98,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ---------- helpers ----------
 
 def _read_json(path: Path, default):
     if not path.exists():
@@ -196,9 +207,7 @@ def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40) -> List
     try:
         resp = requests.post(
             f"{SHOPGOODWILL_BASE}/Search/ItemListing",
-            json=payload,
-            headers=headers,
-            timeout=20,
+            json=payload, headers=headers, timeout=20,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -212,17 +221,112 @@ def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40) -> List
     return []
 
 
-@app.get("/api/brands")
-def get_brands():
-    return _read_json(BRANDS_FILE, DEFAULT_BRANDS)
+# ---------- storage (Supabase REST or local file) ----------
+
+def _supabase_enabled() -> bool:
+    return bool(SUPABASE_URL and SUPABASE_KEY)
 
 
-@app.post("/api/brands")
-def set_brands(brands: List[str]):
+def _supabase(method: str, path: str, *, body=None, params=None, prefer: Optional[str] = None):
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if prefer:
+        headers["Prefer"] = prefer
+    try:
+        resp = requests.request(
+            method,
+            f"{SUPABASE_URL}/rest/v1/{path}",
+            headers=headers, params=params, json=body, timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Supabase network error: {exc}")
+    if not resp.ok:
+        raise HTTPException(status_code=502, detail=f"Supabase {resp.status_code}: {resp.text[:240]}")
+    if not resp.text:
+        return []
+    try:
+        return resp.json()
+    except ValueError:
+        return []
+
+
+def store_get_brands() -> List[str]:
+    if _supabase_enabled():
+        rows = _supabase(
+            "GET", "thrift_settings",
+            params={"key": "eq.brands", "select": "value"},
+        )
+        if rows and rows[0].get("value"):
+            value = rows[0]["value"]
+            if isinstance(value, list):
+                return value
+        return list(DEFAULT_BRANDS)
+    return _read_json(BRANDS_FILE, list(DEFAULT_BRANDS))
+
+
+def store_set_brands(brands: List[str]) -> List[str]:
     cleaned = [b.strip() for b in brands if b and b.strip()]
+    if _supabase_enabled():
+        _supabase(
+            "POST", "thrift_settings",
+            body={"key": "brands", "value": cleaned},
+            prefer="return=minimal,resolution=merge-duplicates",
+        )
+        return cleaned
     _write_json(BRANDS_FILE, cleaned)
     return cleaned
 
+
+def store_list_favorites() -> list:
+    if _supabase_enabled():
+        return _supabase(
+            "GET", "thrift_favorites",
+            params={"select": "*", "order": "saved_at.desc"},
+        )
+    return _read_json(FAVORITES_FILE, [])
+
+
+def store_add_favorite(fav: Favorite) -> list:
+    payload = {
+        "item_id": fav.item_id,
+        "title": fav.title,
+        "image_url": fav.image_url,
+        "listing_url": fav.listing_url,
+        "brand": fav.brand or "",
+        "saved_at": fav.saved_at,
+    }
+    if _supabase_enabled():
+        _supabase(
+            "POST", "thrift_favorites",
+            body=payload,
+            prefer="return=minimal,resolution=merge-duplicates",
+        )
+        return store_list_favorites()
+    favs = _read_json(FAVORITES_FILE, [])
+    if not any(f.get("item_id") == fav.item_id for f in favs):
+        favs.append(payload)
+        _write_json(FAVORITES_FILE, favs)
+    return favs
+
+
+def store_remove_favorite(item_id: int) -> list:
+    if _supabase_enabled():
+        _supabase(
+            "DELETE", "thrift_favorites",
+            params={"item_id": f"eq.{item_id}"},
+        )
+        return store_list_favorites()
+    favs = _read_json(FAVORITES_FILE, [])
+    remaining = [f for f in favs if f.get("item_id") != item_id]
+    _write_json(FAVORITES_FILE, remaining)
+    return remaining
+
+
+# ---------- routes ----------
 
 @app.get("/api/feed", response_model=List[FeedItem])
 def get_feed(
@@ -242,36 +346,61 @@ def get_feed(
     return items
 
 
+@app.get("/api/brands")
+def get_brands():
+    return store_get_brands()
+
+
+@app.post("/api/brands")
+def set_brands(brands: List[str]):
+    return store_set_brands(brands)
+
+
 @app.get("/api/favorites")
 def list_favorites():
-    return _read_json(FAVORITES_FILE, [])
+    return store_list_favorites()
 
 
 @app.post("/api/favorites")
 def add_favorite(fav: Favorite):
-    favs = _read_json(FAVORITES_FILE, [])
-    if not any(f.get("item_id") == fav.item_id for f in favs):
-        favs.append(fav.model_dump())
-        _write_json(FAVORITES_FILE, favs)
-    return favs
+    return store_add_favorite(fav)
 
 
 @app.delete("/api/favorites/{item_id}")
 def remove_favorite(item_id: int):
-    favs = _read_json(FAVORITES_FILE, [])
-    remaining = [f for f in favs if f.get("item_id") != item_id]
-    _write_json(FAVORITES_FILE, remaining)
-    return remaining
+    return store_remove_favorite(item_id)
+
+
+@app.get("/api/health")
+def health():
+    return {
+        "ok": True,
+        "storage": "supabase" if _supabase_enabled() else "file",
+    }
 
 
 @app.get("/")
 def serve_frontend():
     if FRONTEND_FILE.exists():
-        return FileResponse(str(FRONTEND_FILE))
+        return FileResponse(str(FRONTEND_FILE), media_type="text/html")
     raise HTTPException(status_code=404, detail="shopgoodwill_feed.html not found")
+
+
+@app.get("/manifest.webmanifest")
+def serve_manifest():
+    if MANIFEST_FILE.exists():
+        return FileResponse(str(MANIFEST_FILE), media_type="application/manifest+json")
+    raise HTTPException(status_code=404)
+
+
+@app.get("/icon.svg")
+def serve_icon():
+    if ICON_FILE.exists():
+        return FileResponse(str(ICON_FILE), media_type="image/svg+xml")
+    raise HTTPException(status_code=404)
 
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(app, host="127.0.0.1", port=8765)
+    port = int(os.environ.get("PORT", "8765"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: sarah-thrift-feed
+    runtime: python
+    plan: free
+    branch: claude/research-shopgoodwill-scripts-hKck6
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn shopgoodwill_api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SHOPGOODWILL_TOKEN
+        sync: false
