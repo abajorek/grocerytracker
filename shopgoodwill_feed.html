@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#4a3b2a">
+  <meta name="theme-color" content="#1a1d2e">
   <title>Sarah's Thrift Feed</title>
 
   <link rel="manifest" href="/manifest.webmanifest">
@@ -11,36 +11,41 @@
   <link rel="apple-touch-icon" href="/icon.svg">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Thrift">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --cream: #faf4e9;
-      --cream-2: #f3ead8;
-      --sage: #9caf88;
-      --sage-deep: #6f8264;
-      --rose: #d8a7a7;
-      --rose-deep: #b87a7a;
-      --brown: #4a3b2a;
-      --brown-soft: #6f5b44;
-      --shadow: 0 10px 30px rgba(74, 59, 42, 0.18);
+      --paper: #fafaf7;
+      --paper-2: #efeee8;
+      --paper-3: #e3e0d3;
+      --ink: #1a1d2e;
+      --ink-soft: #4a4f63;
+      --coral: #ff7a6b;
+      --coral-deep: #e85a4a;
+      --peach: #ffd5cc;
+      --peach-deep: #f5b5a8;
+      --shadow: 0 10px 30px rgba(26, 29, 46, 0.10);
+      --shadow-lg: 0 18px 50px rgba(26, 29, 46, 0.18);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body { height: 100%; overflow: hidden; background: var(--brown); }
+    html, body { height: 100%; overflow: hidden; background: var(--paper); }
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      color: var(--brown);
+      color: var(--ink);
       overscroll-behavior: none;
     }
 
     .brand-bar {
       position: fixed; top: 0; left: 0; right: 0; z-index: 30;
       padding: max(env(safe-area-inset-top), 12px) 12px 10px;
-      background: linear-gradient(to bottom, rgba(74,59,42,0.6), transparent);
+      background: linear-gradient(to bottom, rgba(250,250,247,0.95), rgba(250,250,247,0.78));
+      backdrop-filter: blur(14px) saturate(140%);
+      -webkit-backdrop-filter: blur(14px) saturate(140%);
+      border-bottom: 1px solid rgba(26,29,46,0.06);
       display: flex; gap: 8px; overflow-x: auto;
       scrollbar-width: none;
       align-items: center;
@@ -48,39 +53,38 @@
     .brand-bar::-webkit-scrollbar { display: none; }
     .brand-bar h1 {
       font-family: 'DM Serif Display', serif;
-      color: var(--cream);
+      color: var(--ink);
       font-size: 22px;
       white-space: nowrap;
       margin-right: 6px;
       letter-spacing: 0.5px;
-      text-shadow: 0 1px 6px rgba(0,0,0,0.35);
     }
     .chip {
       flex-shrink: 0;
       padding: 8px 16px;
       border-radius: 999px;
-      background: rgba(250, 244, 233, 0.92);
-      color: var(--brown);
+      background: var(--paper-2);
+      color: var(--ink);
       font-size: 14px;
       font-weight: 500;
-      border: 1px solid rgba(255,255,255,0.4);
+      border: 1px solid transparent;
       cursor: pointer;
-      transition: transform 0.15s ease, background 0.2s ease;
+      transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease;
       white-space: nowrap;
       font-family: inherit;
     }
     .chip:active { transform: scale(0.95); }
     .chip.active {
-      background: var(--rose);
-      color: var(--cream);
-      border-color: var(--rose-deep);
+      background: var(--coral);
+      color: #ffffff;
+      border-color: var(--coral-deep);
     }
     .chip.add, .chip.saved {
       background: transparent;
-      color: var(--cream);
-      border: 1px dashed rgba(250,244,233,0.7);
+      color: var(--ink);
+      border: 1px dashed rgba(26,29,46,0.35);
     }
-    .chip.saved.active { background: var(--sage); border-color: var(--sage-deep); }
+    .chip.saved.active { background: var(--coral); color: #fff; border-color: var(--coral-deep); border-style: solid; }
 
     .feed {
       height: 100vh; height: 100dvh;
@@ -97,27 +101,27 @@
       width: 100vw;
       scroll-snap-align: start;
       scroll-snap-stop: always;
-      background: var(--cream-2);
+      background: var(--paper-2);
       overflow: hidden;
     }
     .card-img {
       position: absolute; inset: 0;
       width: 100%; height: 100%;
       object-fit: cover;
-      background: var(--cream-2);
+      background: var(--paper-2);
       transition: opacity 0.4s ease, transform 0.2s ease;
     }
     .card-shade {
       position: absolute; left: 0; right: 0; bottom: 0;
       height: 60%;
-      background: linear-gradient(to top, rgba(74,59,42,0.9), rgba(74,59,42,0.45) 45%, transparent);
+      background: linear-gradient(to top, rgba(26,29,46,0.92), rgba(26,29,46,0.45) 45%, transparent);
       pointer-events: none;
     }
 
     .card-info {
       position: absolute; left: 18px; right: 84px;
       bottom: calc(env(safe-area-inset-bottom, 16px) + 22px);
-      color: var(--cream);
+      color: #ffffff;
       z-index: 5;
     }
     .card-brand {
@@ -125,36 +129,43 @@
       font-size: 24px;
       letter-spacing: 0.5px;
       margin-bottom: 6px;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.45);
     }
     .card-title {
       font-size: 15px;
       line-height: 1.35;
       max-height: 4.05em; overflow: hidden;
-      text-shadow: 0 1px 6px rgba(0,0,0,0.45);
+      text-shadow: 0 1px 6px rgba(0,0,0,0.5);
       margin-bottom: 12px;
       opacity: 0.95;
     }
     .price-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .price-tag {
-      background: var(--cream);
-      color: var(--brown);
+      background: var(--paper);
+      color: var(--ink);
       padding: 8px 14px;
       border-radius: 999px;
-      font-weight: 600;
+      font-weight: 700;
       font-size: 16px;
       box-shadow: var(--shadow);
     }
     .time-tag {
-      background: rgba(216, 167, 167, 0.95);
-      color: var(--cream);
+      background: var(--peach);
+      color: var(--ink);
+      padding: 8px 13px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .time-tag.urgent { background: var(--coral-deep); color: #fff; }
+    .bid-tag {
+      background: rgba(26,29,46,0.85);
+      color: var(--peach);
       padding: 8px 13px;
       border-radius: 999px;
       font-size: 13px;
       font-weight: 500;
     }
-    .time-tag.urgent { background: rgba(176, 80, 80, 0.95); }
-    .bid-tag { background: rgba(156,175,136,0.95); color: var(--cream); padding: 8px 13px; border-radius: 999px; font-size: 13px; font-weight: 500; }
 
     .actions {
       position: absolute;
@@ -167,8 +178,8 @@
     .action-btn {
       width: 52px; height: 52px;
       border-radius: 50%;
-      background: rgba(250,244,233,0.92);
-      color: var(--brown);
+      background: rgba(250,250,247,0.95);
+      color: var(--ink);
       border: none;
       font-size: 22px;
       display: grid; place-items: center;
@@ -179,15 +190,15 @@
       font-family: inherit;
     }
     .action-btn:active { transform: scale(0.92); }
-    .action-btn.fav.active { background: var(--rose); color: var(--cream); }
+    .action-btn.fav.active { background: var(--coral); color: #fff; }
 
     .burst {
       position: absolute; left: 50%; top: 50%;
       transform: translate(-50%, -50%) scale(0);
       font-size: 110px;
-      color: var(--rose);
+      color: var(--coral);
       pointer-events: none;
-      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35));
+      filter: drop-shadow(0 4px 14px rgba(0,0,0,0.4));
       z-index: 8;
       opacity: 0;
     }
@@ -206,32 +217,36 @@
       border-radius: 999px;
       font-family: 'DM Serif Display', serif;
       font-size: 26px;
-      color: var(--cream);
+      color: #ffffff;
       pointer-events: none;
       z-index: 9;
       opacity: 0;
       transform: translateY(-50%) scale(0.7);
       transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+      box-shadow: var(--shadow-lg);
       letter-spacing: 0.5px;
       white-space: nowrap;
     }
-    .swipe-overlay.save { left: 24px; background: var(--rose); border: 2px solid var(--rose-deep); }
-    .swipe-overlay.bid  { right: 24px; background: var(--sage); border: 2px solid var(--sage-deep); }
+    .swipe-overlay.save { left: 24px; background: var(--coral); border: 2px solid var(--coral-deep); }
+    .swipe-overlay.bid  { right: 24px; background: var(--ink); border: 2px solid #000; }
     .swipe-overlay.show { opacity: 1; transform: translateY(-50%) scale(1); }
     .swipe-overlay.peek { opacity: 0.7; }
 
-    .drawer-bg {
+    .drawer-bg, .modal-bg {
       position: fixed; inset: 0; z-index: 40;
-      background: rgba(74,59,42,0.5);
+      background: rgba(26,29,46,0.55);
       opacity: 0; pointer-events: none;
       transition: opacity 0.25s ease;
     }
-    .drawer-bg.open { opacity: 1; pointer-events: auto; }
+    .drawer-bg.open, .modal-bg.open { opacity: 1; pointer-events: auto; }
+    .modal-bg { display: grid; place-items: end center; padding: 0; }
+    .modal-bg.open { display: grid; }
+    @media (min-height: 700px) { .modal-bg { place-items: center; padding: 24px; } }
+
     .drawer {
       position: fixed; top: 0; right: 0; bottom: 0;
       width: min(420px, 88vw);
-      background: var(--cream);
+      background: var(--paper);
       transform: translateX(100%);
       transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
       z-index: 41;
@@ -240,34 +255,35 @@
     }
     .drawer.open { transform: translateX(0); }
     .drawer-handle {
-      width: 40px; height: 4px; background: var(--cream-2);
+      width: 40px; height: 4px; background: var(--paper-3);
       border-radius: 4px; margin: 0 auto 18px;
     }
     .drawer h2 {
       font-family: 'DM Serif Display', serif;
       font-size: 26px;
-      color: var(--brown);
+      color: var(--ink);
       margin-bottom: 6px;
       line-height: 1.2;
     }
     .pill {
       display: inline-block;
-      background: var(--sage);
-      color: var(--cream);
+      background: var(--coral);
+      color: #fff;
       padding: 4px 12px;
       border-radius: 999px;
       font-size: 12px;
       letter-spacing: 0.5px;
       margin-bottom: 14px;
       text-transform: uppercase;
+      font-weight: 600;
     }
     .row {
       display: flex; justify-content: space-between;
-      padding: 12px 0; border-bottom: 1px solid var(--cream-2);
+      padding: 12px 0; border-bottom: 1px solid var(--paper-2);
       font-size: 14px;
     }
-    .row b { color: var(--brown); font-weight: 600; }
-    .row span { color: var(--brown-soft); }
+    .row b { color: var(--ink); font-weight: 600; }
+    .row span { color: var(--ink-soft); }
     .drawer-actions { margin-top: 22px; display: flex; gap: 10px; }
     .drawer-actions a, .drawer-actions button {
       flex: 1;
@@ -281,26 +297,27 @@
       cursor: pointer;
       font-family: inherit;
     }
-    .btn-primary { background: var(--sage); color: var(--cream); }
-    .btn-secondary { background: var(--cream-2); color: var(--brown); }
+    .btn-primary { background: var(--coral); color: #fff; }
+    .btn-primary:disabled { background: var(--paper-3); color: var(--ink-soft); cursor: not-allowed; }
+    .btn-secondary { background: var(--paper-2); color: var(--ink); }
 
     .center-msg {
       position: absolute; inset: 0;
       display: grid; place-items: center;
-      color: var(--cream);
+      color: var(--ink);
       text-align: center;
       padding: 24px;
     }
     .center-msg h3 {
       font-family: 'DM Serif Display', serif;
       font-size: 30px; margin-bottom: 10px;
-      color: var(--cream);
+      color: var(--ink);
     }
-    .center-msg p { opacity: 0.9; max-width: 320px; line-height: 1.45; }
+    .center-msg p { color: var(--ink-soft); max-width: 320px; line-height: 1.45; }
     .dots { margin-top: 14px; display: inline-flex; gap: 6px; }
     .dots span {
       width: 8px; height: 8px; border-radius: 50%;
-      background: var(--rose);
+      background: var(--coral);
       animation: bounce 1.2s infinite ease-in-out;
     }
     .dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -310,44 +327,45 @@
       40% { transform: translateY(-8px); opacity: 1; }
     }
 
-    .modal-bg {
-      position: fixed; inset: 0; z-index: 50;
-      background: rgba(74,59,42,0.65);
-      display: none; place-items: center;
-      padding: 24px;
-    }
-    .modal-bg.open { display: grid; }
     .modal {
-      background: var(--cream);
-      border-radius: 18px;
-      padding: 24px;
-      max-width: 420px; width: 100%;
-      box-shadow: var(--shadow);
+      background: var(--paper);
+      border-radius: 18px 18px 0 0;
+      padding: 24px 22px calc(env(safe-area-inset-bottom, 24px) + 24px);
+      max-width: 460px; width: 100%;
+      box-shadow: var(--shadow-lg);
+      max-height: 92vh;
+      overflow-y: auto;
     }
+    @media (min-height: 700px) { .modal { border-radius: 18px; padding: 24px; } }
     .modal h3 {
       font-family: 'DM Serif Display', serif;
-      font-size: 24px;
-      margin-bottom: 14px;
-      color: var(--brown);
+      font-size: 26px;
+      margin-bottom: 6px;
+      color: var(--ink);
+    }
+    .modal-sub {
+      color: var(--ink-soft);
+      font-size: 13px;
+      margin-bottom: 16px;
     }
     .modal input {
       width: 100%;
       padding: 12px 14px;
       border-radius: 10px;
-      border: 1px solid var(--cream-2);
+      border: 1px solid var(--paper-2);
       font-size: 15px;
       margin-bottom: 14px;
-      background: var(--cream-2);
-      color: var(--brown);
+      background: var(--paper-2);
+      color: var(--ink);
       font-family: inherit;
     }
-    .modal input:focus { outline: 2px solid var(--sage); }
+    .modal input:focus { outline: 2px solid var(--coral); outline-offset: 1px; }
     .modal-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-    .modal-list .chip { background: var(--cream-2); color: var(--brown); border: none; }
+    .modal-list .chip { background: var(--paper-2); color: var(--ink); border: none; }
     .modal-list .chip .x { margin-left: 6px; opacity: 0.55; font-weight: 600; }
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
     .modal-actions button {
-      padding: 10px 18px;
+      padding: 12px 20px;
       border-radius: 10px;
       border: none;
       font-weight: 600;
@@ -355,6 +373,75 @@
       font-family: inherit;
       font-size: 14px;
     }
+
+    .bid-thumb-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: var(--paper-2);
+      border-radius: 14px;
+      align-items: center;
+    }
+    .bid-thumb-row img {
+      width: 56px; height: 56px;
+      object-fit: cover;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+    .bid-thumb-row > div {
+      flex: 1; min-width: 0;
+    }
+    .bid-title-text {
+      font-size: 14px; font-weight: 600; color: var(--ink);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bid-current-text {
+      font-size: 12px; color: var(--ink-soft); margin-top: 2px;
+    }
+    .bid-presets {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .bid-preset {
+      padding: 14px 10px;
+      border-radius: 12px;
+      border: 1.5px solid var(--paper-2);
+      background: var(--paper);
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+      text-align: left;
+    }
+    .bid-preset .label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink-soft);
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .bid-preset:active { transform: scale(0.97); }
+    .bid-preset.selected {
+      background: var(--coral);
+      color: #fff;
+      border-color: var(--coral-deep);
+    }
+    .bid-preset.selected .label { color: rgba(255,255,255,0.85); }
+    .bid-error {
+      color: var(--coral-deep);
+      font-size: 13px;
+      margin-bottom: 8px;
+      min-height: 1.2em;
+      line-height: 1.3;
+    }
+    .bid-error.success { color: #6f8264; }
 
     @media (max-width: 380px) {
       .card-info { right: 76px; }
@@ -372,7 +459,7 @@
       <div class="center-msg">
         <div>
           <h3>Pick a brand</h3>
-          <p>Tap a chip up top to start. Flick up for the next find. Swipe right to save ♥ · swipe left to bid ↗</p>
+          <p>Tap a chip up top to start. Flick up for the next find. Swipe right to save · swipe left to bid.</p>
         </div>
       </div>
     </div>
@@ -391,6 +478,27 @@
       <input id="brandInput" placeholder="Add a brand (Coach, Madewell…)" autocomplete="off">
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeBrandModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="bidModalBg">
+    <div class="modal">
+      <h3>Place a bid</h3>
+      <div class="modal-sub">Pick an amount or type your own.</div>
+      <div class="bid-thumb-row">
+        <img id="bidThumb" alt="">
+        <div>
+          <div class="bid-title-text" id="bidTitle"></div>
+          <div class="bid-current-text" id="bidCurrent"></div>
+        </div>
+      </div>
+      <div class="bid-presets" id="bidPresets"></div>
+      <input id="bidCustom" type="number" inputmode="decimal" step="0.01" placeholder="Custom amount">
+      <div class="bid-error" id="bidError"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeBidModal()">Cancel</button>
+        <button class="btn-primary" id="bidConfirm" disabled>Place bid</button>
       </div>
     </div>
   </div>
@@ -442,7 +550,11 @@
         headers: {'Content-Type': 'application/json'},
         body: body ? JSON.stringify(body) : undefined,
       });
-      if (!r.ok) throw new Error(`${method} ${path} → ${r.status}`);
+      if (!r.ok) {
+        let detail = String(r.status);
+        try { const j = await r.json(); if (j && j.detail) detail = j.detail; } catch {}
+        throw new Error(detail);
+      }
       return r.json();
     }
 
@@ -507,7 +619,7 @@
           <div class="center-msg">
             <div>
               <h3>Pulling ${escapeHtml(brand)} finds…</h3>
-              <p>Flick up for next · swipe → to save · swipe ← to bid</p>
+              <p>Flick up for next · → to save · ← to bid</p>
               <div class="dots"><span></span><span></span><span></span></div>
             </div>
           </div>
@@ -580,7 +692,7 @@
           <div class="actions">
             <button class="${heartCls}" data-fav aria-label="Save">${heart}</button>
             <button class="action-btn" data-info aria-label="Details">i</button>
-            <a class="action-btn" href="${escapeHtml(it.listing_url)}" target="_blank" rel="noopener" aria-label="Open on ShopGoodwill">↗</a>
+            <button class="action-btn" data-bid aria-label="Bid">$</button>
           </div>
         </article>`;
     }
@@ -672,7 +784,7 @@
           flashOverlay(overlaySave);
         } else if (dx < -SWIPE_THRESHOLD) {
           flashOverlay(overlayBid);
-          setTimeout(() => window.open(item.listing_url, '_blank', 'noopener'), 140);
+          setTimeout(() => openBidSheet(item), 180);
         }
       }, { passive: true });
 
@@ -683,6 +795,10 @@
       card.querySelector('[data-info]').addEventListener('click', (e) => {
         e.stopPropagation();
         openDrawer(item);
+      });
+      card.querySelector('[data-bid]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openBidSheet(item);
       });
     }
 
@@ -735,7 +851,7 @@
         const favs = await apiGet('/api/favorites');
         const feed = document.getElementById('feed');
         if (!favs.length) {
-          feed.innerHTML = `<div class="card"><div class="center-msg"><div><h3>Nothing saved yet</h3><p>Swipe a card to the right to save it here.</p></div></div></div>`;
+          feed.innerHTML = `<div class="card"><div class="center-msg"><div><h3>Nothing saved yet</h3><p>Swipe a card right to save it here.</p></div></div></div>`;
           return;
         }
         feed.innerHTML = favs.map((f, idx) => `
@@ -766,7 +882,7 @@
         <div class="row"><b>Time left</b><span>${fmtTime(item.seconds_left)}</span></div>
         ${item.location ? `<div class="row"><b>Seller</b><span>${escapeHtml(item.location)}</span></div>` : ''}
         <div class="drawer-actions">
-          <a class="btn-primary" href="${escapeHtml(item.listing_url)}" target="_blank" rel="noopener">Bid on ShopGoodwill</a>
+          <button class="btn-primary" onclick="closeDrawer(); openBidSheet(${JSON.stringify(item).replace(/"/g, '&quot;')})">Bid</button>
           <button class="btn-secondary" onclick="closeDrawer()">Close</button>
         </div>`;
       document.getElementById('drawer').classList.add('open');
@@ -811,6 +927,105 @@
         }
       };
     }
+
+    // ----- bid sheet -----
+
+    let bidContext = null;
+
+    function openBidSheet(item) {
+      bidContext = { item, amount: null };
+      document.getElementById('bidThumb').src = item.image_url;
+      document.getElementById('bidTitle').textContent = item.title;
+      document.getElementById('bidCurrent').textContent =
+        `Current ${fmtPrice(item.current_price)} · min next ${fmtPrice(item.minimum_bid)}`;
+
+      const min = Math.max(item.minimum_bid, item.current_price + 1);
+      const presets = [
+        { label: 'Min',     amount: min },
+        { label: 'Min +$1', amount: min + 1 },
+        { label: 'Min +$5', amount: min + 5 },
+        { label: 'Min +$10', amount: min + 10 },
+      ];
+      const presetsEl = document.getElementById('bidPresets');
+      presetsEl.innerHTML = presets.map(p => `
+        <button class="bid-preset" data-amount="${p.amount}">
+          <span class="label">${escapeHtml(p.label)}</span>
+          ${fmtPrice(p.amount)}
+        </button>
+      `).join('');
+      presetsEl.querySelectorAll('.bid-preset').forEach(btn => {
+        btn.onclick = () => selectBidAmount(parseFloat(btn.dataset.amount), btn);
+      });
+
+      const custom = document.getElementById('bidCustom');
+      custom.value = '';
+      custom.placeholder = `Custom amount (e.g. ${(min + 2.50).toFixed(2)})`;
+      custom.oninput = () => {
+        const v = parseFloat(custom.value);
+        if (Number.isFinite(v) && v > 0) {
+          bidContext.amount = v;
+          presetsEl.querySelectorAll('.bid-preset').forEach(b => b.classList.remove('selected'));
+          document.getElementById('bidConfirm').disabled = false;
+        } else {
+          if (!presetsEl.querySelector('.bid-preset.selected')) {
+            document.getElementById('bidConfirm').disabled = true;
+            bidContext.amount = null;
+          }
+        }
+      };
+
+      const err = document.getElementById('bidError');
+      err.textContent = '';
+      err.classList.remove('success');
+      const confirmBtn = document.getElementById('bidConfirm');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Place bid';
+      document.getElementById('bidModalBg').classList.add('open');
+    }
+
+    function selectBidAmount(amount, btnEl) {
+      bidContext.amount = amount;
+      document.querySelectorAll('.bid-preset').forEach(b => b.classList.remove('selected'));
+      if (btnEl) btnEl.classList.add('selected');
+      document.getElementById('bidCustom').value = '';
+      document.getElementById('bidConfirm').disabled = false;
+    }
+
+    function closeBidModal() {
+      document.getElementById('bidModalBg').classList.remove('open');
+      bidContext = null;
+    }
+
+    document.getElementById('bidConfirm').onclick = async () => {
+      if (!bidContext || !bidContext.amount) return;
+      const btn = document.getElementById('bidConfirm');
+      const err = document.getElementById('bidError');
+      btn.disabled = true;
+      btn.textContent = 'Placing…';
+      err.classList.remove('success');
+      err.textContent = '';
+      try {
+        await apiSend('/api/bid', 'POST', {
+          item_id: bidContext.item.id,
+          amount: bidContext.amount,
+        });
+        btn.textContent = 'Bid placed ✓';
+        err.classList.add('success');
+        err.textContent = `Bid of ${fmtPrice(bidContext.amount)} submitted.`;
+        setTimeout(closeBidModal, 1400);
+      } catch (e) {
+        err.textContent = e.message || String(e);
+        btn.disabled = false;
+        btn.textContent = 'Place bid';
+      }
+    };
+
+    document.getElementById('bidModalBg').addEventListener('click', (e) => {
+      if (e.target.id === 'bidModalBg') closeBidModal();
+    });
+    document.getElementById('brandModalBg').addEventListener('click', (e) => {
+      if (e.target.id === 'brandModalBg') closeBrandModal();
+    });
 
     let observer;
     function observeLastCard() {

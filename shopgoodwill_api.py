@@ -18,6 +18,7 @@ Production (Render / Railway / Fly):
 
 If anonymous ShopGoodwill search starts returning 401, set
 SHOPGOODWILL_TOKEN to a JWT lifted from a logged-in browser session.
+The same token is required for /api/bid (placing real bids).
 """
 
 import json
@@ -88,6 +89,12 @@ class Favorite(BaseModel):
     listing_url: str
     saved_at: str
     brand: Optional[str] = ""
+
+
+class BidRequest(BaseModel):
+    item_id: int
+    amount: float
+    quantity: int = 1
 
 
 app = FastAPI(title="Sarah's Thrift Feed")
@@ -184,10 +191,6 @@ DEFAULT_HEADERS = {
 
 
 def _shopgoodwill_payload(query: str, page: int, page_size: int) -> dict:
-    """Match the live shopgoodwill.com search payload shape (April 2026).
-    Field set comes from scottmconway/shopgoodwill-scripts config example.
-    Note: ShopGoodwill ignores `page`/`pageSize` for some queries and
-    paginates internally; we still send them for safety."""
     return {
         "isSize": False,
         "isWeddingCatagory": "false",
@@ -265,6 +268,52 @@ def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40) -> List
             return data["searchResults"].get("items", []) or []
         return data.get("items", []) or []
     return []
+
+
+def _place_bid(item_id: int, amount: float, quantity: int = 1) -> dict:
+    token = os.environ.get("SHOPGOODWILL_TOKEN")
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "SHOPGOODWILL_TOKEN is not set on the server. Add your ShopGoodwill "
+                "JWT in Render → Environment to enable bidding."
+            ),
+        )
+    headers = dict(DEFAULT_HEADERS)
+    headers["Authorization"] = f"Bearer {token}"
+    payload = {
+        "itemId": int(item_id),
+        "bidAmount": f"{float(amount):.2f}",
+        "quantity": int(quantity),
+    }
+    try:
+        resp = requests.post(
+            f"{SHOPGOODWILL_BASE}/ItemBid/PlaceBid",
+            json=payload, headers=headers, timeout=20,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
+
+    if resp.status_code in (401, 403):
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "ShopGoodwill rejected the token (it may be expired). Log in again "
+                "and update SHOPGOODWILL_TOKEN in Render → Environment."
+            ),
+        )
+    if not resp.ok:
+        body = (resp.text or "")[:300].replace("\n", " ")
+        raise HTTPException(
+            status_code=502,
+            detail=f"ShopGoodwill returned {resp.status_code}: {body}",
+        )
+
+    try:
+        return resp.json()
+    except ValueError:
+        return {"raw": (resp.text or "")[:300]}
 
 
 # ---------- storage (Supabase REST or local file) ----------
@@ -392,6 +441,11 @@ def get_feed(
     return items
 
 
+@app.post("/api/bid")
+def api_place_bid(req: BidRequest):
+    return {"ok": True, "result": _place_bid(req.item_id, req.amount, req.quantity)}
+
+
 @app.get("/api/debug/upstream")
 def debug_upstream(brand: str = "Coach", page: int = 1, page_size: int = 5):
     """Diagnostic: hit ShopGoodwill directly and return raw status + body snippet."""
@@ -438,6 +492,7 @@ def health():
     return {
         "ok": True,
         "storage": "supabase" if _supabase_enabled() else "file",
+        "bidding": bool(os.environ.get("SHOPGOODWILL_TOKEN")),
     }
 
 
