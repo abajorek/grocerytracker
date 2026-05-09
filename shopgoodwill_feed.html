@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#fafaf7">
   <meta name="color-scheme" content="light">
-  <title>Sarah's Thrift Feed</title>
+  <title>Goodwill Hunting</title>
 
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon.svg">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Thrift">
+  <meta name="apple-mobile-web-app-title" content="Hunting">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter+Tight:wght@400..700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Geist:wght@400..700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: light;
@@ -38,13 +38,13 @@
       --success-text: #4d553e;
       --shadow: 0 8px 24px rgba(28, 28, 26, 0.08);
       --shadow-lg: 0 16px 40px rgba(28, 28, 26, 0.16);
-      --serif: 'Fraunces', 'DM Serif Display', Georgia, serif;
-      --sans: 'Inter Tight', 'Inter', system-ui, -apple-system, sans-serif;
+      --display: 'Bricolage Grotesque', 'Inter Tight', system-ui, sans-serif;
+      --body: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; overflow: hidden; background: var(--paper); }
     body {
-      font-family: var(--sans);
+      font-family: var(--body);
       color: var(--ink);
       overscroll-behavior: none;
       -webkit-font-smoothing: antialiased;
@@ -64,14 +64,14 @@
     }
     .brand-bar::-webkit-scrollbar { display: none; }
     .brand-bar h1 {
-      font-family: var(--serif);
-      font-variation-settings: 'opsz' 144;
+      font-family: var(--display);
+      font-variation-settings: 'opsz' 96;
       font-weight: 600;
       color: var(--ink);
-      font-size: 24px;
+      font-size: 20px;
       white-space: nowrap;
       margin-right: 8px;
-      letter-spacing: -0.5px;
+      letter-spacing: -0.6px;
     }
     .chip {
       flex-shrink: 0;
@@ -199,11 +199,11 @@
       z-index: 5;
     }
     .card-brand {
-      font-family: var(--serif);
-      font-variation-settings: 'opsz' 144;
-      font-weight: 500;
-      font-size: 28px;
-      letter-spacing: -0.5px;
+      font-family: var(--display);
+      font-variation-settings: 'opsz' 96;
+      font-weight: 600;
+      font-size: 26px;
+      letter-spacing: -0.6px;
       margin-bottom: 6px;
       text-shadow: 0 2px 8px rgba(0,0,0,0.45);
       line-height: 1.05;
@@ -250,17 +250,17 @@
       position: absolute;
       right: 14px;
       bottom: calc(env(safe-area-inset-bottom, 16px) + 22px);
-      display: flex; flex-direction: column; gap: 14px;
+      display: flex; flex-direction: column; gap: 12px;
       align-items: center;
       z-index: 5;
     }
     .action-btn {
-      width: 52px; height: 52px;
+      width: 50px; height: 50px;
       border-radius: 50%;
       background: rgba(250,250,247,0.95);
       color: var(--ink);
       border: none;
-      font-size: 22px;
+      font-size: 20px;
       display: grid; place-items: center;
       cursor: pointer;
       box-shadow: var(--shadow);
@@ -270,6 +270,7 @@
     }
     .action-btn:active { transform: scale(0.92); }
     .action-btn.fav.active { background: var(--coral); color: #fff; }
+    .action-btn .icon { font-size: 18px; line-height: 1; }
 
     .burst {
       position: absolute; left: 50%; top: 50%;
@@ -294,10 +295,10 @@
       top: 50%;
       padding: 18px 30px;
       border-radius: 999px;
-      font-family: var(--serif);
-      font-variation-settings: 'opsz' 144;
-      font-weight: 500;
-      font-size: 26px;
+      font-family: var(--display);
+      font-variation-settings: 'opsz' 96;
+      font-weight: 600;
+      font-size: 24px;
       color: #fff;
       pointer-events: none;
       z-index: 9;
@@ -305,7 +306,7 @@
       transform: translateY(-50%) scale(0.7);
       transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
       box-shadow: var(--shadow-lg);
-      letter-spacing: -0.3px;
+      letter-spacing: -0.4px;
       white-space: nowrap;
     }
     .swipe-overlay.save { left: 24px; background: var(--coral); border: 2px solid var(--coral-deep); }
@@ -341,14 +342,14 @@
       border-radius: 4px; margin: 0 auto 18px;
     }
     .drawer h2 {
-      font-family: var(--serif);
-      font-variation-settings: 'opsz' 144;
-      font-weight: 500;
-      font-size: 28px;
+      font-family: var(--display);
+      font-variation-settings: 'opsz' 96;
+      font-weight: 600;
+      font-size: 26px;
       color: var(--ink);
       margin-bottom: 6px;
       line-height: 1.15;
-      letter-spacing: -0.5px;
+      letter-spacing: -0.6px;
     }
     .pill {
       display: inline-block;
@@ -369,7 +370,29 @@
       font-size: 14px;
     }
     .row b { color: var(--ink); font-weight: 600; }
-    .row span { color: var(--ink-soft); }
+    .row span { color: var(--ink-soft); text-align: right; }
+    .drawer-section {
+      margin-top: 18px;
+    }
+    .drawer-section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 8px;
+    }
+    .notes-list {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 12px 14px;
+      background: var(--paper-2);
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .notes-list li { display: flex; gap: 6px; color: var(--ink); }
+    .notes-list li b { font-weight: 600; color: var(--ink-soft); }
     .drawer-actions { margin-top: 22px; display: flex; gap: 10px; }
     .drawer-actions a, .drawer-actions button {
       flex: 1;
@@ -396,12 +419,12 @@
       z-index: 3;
     }
     .center-msg h3 {
-      font-family: var(--serif);
-      font-variation-settings: 'opsz' 144;
-      font-weight: 500;
-      font-size: 32px; margin-bottom: 10px;
+      font-family: var(--display);
+      font-variation-settings: 'opsz' 96;
+      font-weight: 600;
+      font-size: 30px; margin-bottom: 10px;
       color: var(--ink);
-      letter-spacing: -0.5px;
+      letter-spacing: -0.6px;
       line-height: 1.1;
     }
     .center-msg p { color: var(--ink-soft); max-width: 320px; line-height: 1.45; }
@@ -430,13 +453,13 @@
     }
     @media (min-height: 700px) { .modal { border-radius: 18px; padding: 24px; } }
     .modal h3 {
-      font-family: var(--serif);
-      font-variation-settings: 'opsz' 144;
-      font-weight: 500;
-      font-size: 28px;
+      font-family: var(--display);
+      font-variation-settings: 'opsz' 96;
+      font-weight: 600;
+      font-size: 26px;
       margin-bottom: 6px;
       color: var(--ink);
-      letter-spacing: -0.5px;
+      letter-spacing: -0.6px;
     }
     .modal-sub {
       color: var(--ink-soft);
@@ -472,7 +495,7 @@
     .bid-thumb-row {
       display: flex;
       gap: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       padding: 12px;
       background: var(--paper-2);
       border-radius: 14px;
@@ -492,6 +515,40 @@
     .bid-current-text {
       font-size: 12px; color: var(--ink-soft); margin-top: 2px;
     }
+
+    .bid-comps {
+      display: none;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 10px 14px;
+      background: var(--paper-2);
+      border: 1px solid var(--hairline);
+      border-radius: 12px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      color: var(--ink-soft);
+    }
+    .bid-comps.show { display: flex; }
+    .bid-comps.loading { color: var(--ink-soft); font-style: italic; }
+    .bid-comps .comps-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+    }
+    .bid-comps .comps-median {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--ink);
+      letter-spacing: -0.3px;
+    }
+    .bid-comps .comps-range {
+      font-size: 11px;
+      color: var(--ink-soft);
+    }
+
     .bid-presets {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -548,16 +605,78 @@
       color: var(--success-text);
     }
 
+    /* ----- lightbox / inspect zoom ----- */
+    .lightbox {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.96);
+      z-index: 60;
+      display: none;
+      flex-direction: column;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox-close {
+      position: absolute;
+      top: max(env(safe-area-inset-top, 12px), 14px);
+      right: 14px;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.14);
+      color: #fff;
+      border: none;
+      font-size: 26px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 61;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      font-family: inherit;
+    }
+    .lightbox-close:active { background: rgba(255,255,255,0.28); }
+    .lightbox-stage {
+      flex: 1;
+      overflow: auto;
+      display: grid;
+      place-items: center;
+      -webkit-overflow-scrolling: touch;
+    }
+    .lightbox-stage img {
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+      cursor: zoom-in;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    .lightbox-stage.zoomed { place-items: start; }
+    .lightbox-stage.zoomed img {
+      max-width: none;
+      max-height: none;
+      cursor: zoom-out;
+    }
+    .lightbox-hint {
+      position: absolute;
+      bottom: max(env(safe-area-inset-bottom, 12px), 16px);
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.55);
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+      text-transform: uppercase;
+    }
+
     @media (max-width: 380px) {
       .card-info { right: 76px; }
-      .card-brand { font-size: 24px; }
+      .card-brand { font-size: 22px; }
       .gallery-pip { bottom: calc(env(safe-area-inset-bottom, 16px) + 165px); }
+      .brand-bar h1 { font-size: 18px; }
+      .action-btn { width: 46px; height: 46px; font-size: 18px; }
     }
   </style>
 </head>
 <body>
   <div class="brand-bar" id="brandBar">
-    <h1>Thrift</h1>
+    <h1>Goodwill Hunting</h1>
   </div>
 
   <div class="feed" id="feed">
@@ -599,6 +718,7 @@
           <div class="bid-current-text" id="bidCurrent"></div>
         </div>
       </div>
+      <div class="bid-comps" id="bidComps"></div>
       <div class="bid-presets" id="bidPresets"></div>
       <input id="bidCustom" type="number" inputmode="decimal" step="0.01" placeholder="Custom amount">
       <div class="bid-notice" id="bidNotice"></div>
@@ -607,6 +727,14 @@
         <button class="btn-primary" id="bidConfirm" disabled>Place bid</button>
       </div>
     </div>
+  </div>
+
+  <div class="lightbox" id="lightbox" aria-hidden="true">
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close">×</button>
+    <div class="lightbox-stage" id="lightboxStage">
+      <img id="lightboxImg" alt="">
+    </div>
+    <div class="lightbox-hint">Tap photo to zoom · drag to pan</div>
   </div>
 
   <script>
@@ -625,8 +753,9 @@
       exhausted: false,
     };
 
-    const galleryCache = new Map(); // itemId -> { images: [...], index: 0 }
-    const detailFetched = new Set(); // itemIds already fetched (success or fail)
+    const galleryCache = new Map();
+    const detailCache = new Map();
+    const detailFetched = new Set();
 
     const fmtPrice = n => `$${(Number(n) || 0).toFixed(2)}`;
     const isUrgent = s => s > 0 && s < 3600;
@@ -709,7 +838,7 @@
 
     function renderBrandBar() {
       const bar = document.getElementById('brandBar');
-      bar.innerHTML = '<h1>Thrift</h1>';
+      bar.innerHTML = '<h1>Goodwill Hunting</h1>';
       state.brands.forEach(b => {
         const c = document.createElement('button');
         c.className = 'chip' + (state.mode === 'feed' && b === state.activeBrand ? ' active' : '');
@@ -789,7 +918,6 @@
       feed.querySelectorAll('.card[data-id]').forEach(card => {
         attachGestures(card);
         detailObserver.observe(card);
-        // Apply any cached gallery (e.g. on re-render)
         const id = parseInt(card.dataset.id, 10);
         if (galleryCache.has(id)) applyGallery(card, id);
       });
@@ -827,6 +955,7 @@
           <div class="actions">
             <button class="${heartCls}" data-fav aria-label="Save">${heart}</button>
             <button class="action-btn" data-info aria-label="Details">i</button>
+            <button class="action-btn" data-zoom aria-label="Zoom photo"><span class="icon">⚶</span></button>
             <button class="action-btn" data-bid aria-label="Bid">$</button>
           </div>
         </article>`;
@@ -935,6 +1064,13 @@
         e.stopPropagation();
         openBidSheet(item);
       });
+      const zoomBtn = card.querySelector('[data-zoom]');
+      if (zoomBtn) {
+        zoomBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openLightbox(currentImageFor(card, id));
+        });
+      }
       const pipPrev = card.querySelector('[data-pip-prev]');
       const pipNext = card.querySelector('[data-pip-next]');
       if (pipPrev) {
@@ -951,6 +1087,13 @@
       }
     }
 
+    function currentImageFor(card, itemId) {
+      const entry = galleryCache.get(itemId);
+      if (entry && entry.images.length) return entry.images[entry.index];
+      const img = card.querySelector('.card-img');
+      return img && img.src ? img.src : '';
+    }
+
     function fireBurst(el) {
       el.classList.remove('go');
       void el.offsetWidth;
@@ -964,7 +1107,7 @@
       setTimeout(() => el.classList.remove('show'), 650);
     }
 
-    // ----- gallery (lazy fetch full-resolution images per card) -----
+    // ----- gallery + lazy detail fetch -----
 
     const detailObserver = new IntersectionObserver((entries) => {
       entries.forEach(e => {
@@ -979,12 +1122,13 @@
       detailFetched.add(itemId);
       try {
         const data = await apiGet(`/api/item/${itemId}`);
+        detailCache.set(itemId, data);
         const images = (data && data.images) || [];
-        if (!images.length) return;
-        galleryCache.set(itemId, { images, index: 0 });
-        applyGallery(card, itemId);
+        if (images.length) {
+          galleryCache.set(itemId, { images, index: 0 });
+          applyGallery(card, itemId);
+        }
       } catch (e) {
-        // Detail fetch is best-effort; silently leave the search-API image in place.
         console.warn('detail fetch failed', itemId, e);
       }
     }
@@ -1034,6 +1178,48 @@
       swapCardImage(card, entry.images[entry.index]);
       updatePip(card, entry);
     }
+
+    // ----- lightbox -----
+
+    const lightbox = document.getElementById('lightbox');
+    const lightboxStage = document.getElementById('lightboxStage');
+    const lightboxImg = document.getElementById('lightboxImg');
+
+    function openLightbox(url) {
+      if (!url) return;
+      lightboxImg.src = url;
+      lightboxStage.classList.remove('zoomed');
+      lightboxStage.scrollTop = 0;
+      lightboxStage.scrollLeft = 0;
+      lightbox.classList.add('open');
+      lightbox.setAttribute('aria-hidden', 'false');
+    }
+    function closeLightbox() {
+      lightbox.classList.remove('open');
+      lightbox.setAttribute('aria-hidden', 'true');
+    }
+    document.getElementById('lightboxClose').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeLightbox();
+    });
+    lightboxImg.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasZoomed = lightboxStage.classList.toggle('zoomed');
+      if (wasZoomed) {
+        // After layout updates, center the scroll on the tap point.
+        requestAnimationFrame(() => {
+          const stageRect = lightboxStage.getBoundingClientRect();
+          const relX = (e.clientX - stageRect.left) / stageRect.width;
+          const relY = (e.clientY - stageRect.top) / stageRect.height;
+          lightboxStage.scrollLeft = relX * (lightboxImg.naturalWidth - stageRect.width);
+          lightboxStage.scrollTop  = relY * (lightboxImg.naturalHeight - stageRect.height);
+        });
+      }
+    });
+    lightboxStage.addEventListener('click', (e) => {
+      // Tapping the dark area outside the photo closes.
+      if (e.target === lightboxStage) closeLightbox();
+    });
 
     async function toggleFav(item, card) {
       const btn = card && card.querySelector('[data-fav]');
@@ -1095,7 +1281,27 @@
       }
     }
 
+    function renderNotesSection(notes) {
+      if (!notes || !notes.length) return '';
+      const items = notes.map(n => {
+        const idx = n.indexOf(':');
+        if (idx === -1) return `<li>${escapeHtml(n)}</li>`;
+        const label = n.slice(0, idx).trim();
+        const value = n.slice(idx + 1).trim();
+        return `<li><b>${escapeHtml(label)}:</b> ${escapeHtml(value)}</li>`;
+      }).join('');
+      return `
+        <div class="drawer-section">
+          <div class="drawer-section-label">Notes</div>
+          <ul class="notes-list">${items}</ul>
+        </div>`;
+    }
+
     function openDrawer(item) {
+      const detail = detailCache.get(item.id) || {};
+      const location = detail.location || item.location || '';
+      const seller = detail.seller || '';
+      const notesHtml = renderNotesSection(detail.notes);
       const c = document.getElementById('drawerContent');
       c.innerHTML = `
         <span class="pill">${escapeHtml(item.brand)}</span>
@@ -1104,7 +1310,9 @@
         <div class="row"><b>Minimum next bid</b><span>${fmtPrice(item.minimum_bid)}</span></div>
         <div class="row"><b>Bids placed</b><span>${item.bid_count || 0}</span></div>
         <div class="row"><b>Time left</b><span>${fmtTime(item.seconds_left)}</span></div>
-        ${item.location ? `<div class="row"><b>Seller</b><span>${escapeHtml(item.location)}</span></div>` : ''}
+        ${location ? `<div class="row"><b>Location</b><span>${escapeHtml(location)}</span></div>` : ''}
+        ${seller ? `<div class="row"><b>Seller</b><span>${escapeHtml(seller)}</span></div>` : ''}
+        ${notesHtml}
         <div class="drawer-actions">
           <button class="btn-primary" onclick="closeDrawer(); openBidSheet(${JSON.stringify(item).replace(/"/g, '&quot;')})">Bid</button>
           <button class="btn-secondary" onclick="closeDrawer()">Close</button>
@@ -1156,6 +1364,45 @@
 
     let bidContext = null;
 
+    function setBidComps(state, payload) {
+      const el = document.getElementById('bidComps');
+      el.classList.remove('show', 'loading');
+      if (state === 'loading') {
+        el.classList.add('show', 'loading');
+        el.textContent = 'Looking up recent eBay sold prices…';
+        return;
+      }
+      if (state === 'none') {
+        el.classList.add('show');
+        el.innerHTML = `<span class="comps-label">eBay sold</span><span class="comps-range">No recent comps found for this item.</span>`;
+        return;
+      }
+      if (state === 'error') {
+        el.classList.add('show');
+        el.innerHTML = `<span class="comps-label">eBay sold</span><span class="comps-range">Couldn't reach eBay just now.</span>`;
+        return;
+      }
+      el.classList.add('show');
+      el.innerHTML = `
+        <span class="comps-label">eBay sold</span>
+        <span class="comps-median">${fmtPrice(payload.median)}</span>
+        <span class="comps-range">median · ${fmtPrice(payload.low)}–${fmtPrice(payload.high)} · ${payload.count} sales</span>`;
+    }
+
+    async function loadCompsFor(title) {
+      setBidComps('loading');
+      try {
+        const data = await apiGet(`/api/comps?title=${encodeURIComponent(title)}`);
+        if (!data.ok) {
+          setBidComps('none');
+          return;
+        }
+        setBidComps('ok', data);
+      } catch (e) {
+        setBidComps('error');
+      }
+    }
+
     function openBidSheet(item) {
       bidContext = { item, amount: null };
       document.getElementById('bidThumb').src = item.image_url;
@@ -1203,6 +1450,9 @@
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Place bid';
       document.getElementById('bidModalBg').classList.add('open');
+
+      // Lazy-fetch comps. Use the listing title (specific to this item).
+      loadCompsFor(item.title);
     }
 
     function selectBidAmount(amount, btnEl) {

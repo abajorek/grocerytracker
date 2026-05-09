@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sarah's Thrift Feed - ShopGoodwill TikTok-style backend
+Goodwill Hunting - ShopGoodwill TikTok-style backend
 
 Wraps ShopGoodwill's public ItemListing search and stores pinned brands +
 saved listings. Storage gracefully degrades:
@@ -21,11 +21,14 @@ SHOPGOODWILL_TOKEN to a JWT lifted from a logged-in browser session.
 The same token is required for /api/bid (placing real bids).
 """
 
+import html as html_module
 import json
 import os
+import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from zoneinfo import ZoneInfo
@@ -97,7 +100,7 @@ class BidRequest(BaseModel):
     quantity: int = 1
 
 
-app = FastAPI(title="Sarah's Thrift Feed")
+app = FastAPI(title="Goodwill Hunting")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -124,8 +127,6 @@ def _write_json(path: Path, value):
 def _build_image_url(image_server: str, image_path: str) -> str:
     if not image_path:
         return ""
-    # ShopGoodwill stores Windows-style paths (e.g. "32\\Items\\2025-09-05\\foo.png");
-    # the Azure CDN expects forward slashes.
     image_path = image_path.replace("\\", "/").strip()
     if image_path.startswith("http://") or image_path.startswith("https://"):
         return image_path
@@ -157,8 +158,6 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
         or raw.get("image")
         or ""
     )
-    # imageUrlString in some responses is a `;`-delimited list of paths;
-    # keep just the first one for the search-card thumbnail.
     if isinstance(image_path, str) and ";" in image_path:
         image_path = image_path.split(";", 1)[0]
     image_url = _build_image_url(raw.get("imageServer", "") or "", image_path)
@@ -194,6 +193,25 @@ DEFAULT_HEADERS = {
     "Sec-Fetch-Site": "same-site",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Dest": "empty",
+}
+
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not.A/Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 
@@ -324,16 +342,12 @@ def _place_bid(item_id: int, amount: float, quantity: int = 1) -> dict:
 
 
 _IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".gif")
-# Fields that may carry a *list* of images (semicolon- or comma-delimited
-# string, OR a JSON array of strings/dicts).
 _IMAGE_LIST_KEYS = (
-    "imageUrlString", "imageURLString",  # primary: full-size paths, ;-delimited
+    "imageUrlString", "imageURLString",
     "imageURLs", "imageUrls",
     "images", "itemImages", "additionalImages", "imageList", "galleryImages",
     "itemImageUrls", "itemImageURLs",
 )
-# Fields that carry a single image path. Note: thumbnailUrlString is
-# excluded; we only use the full-size imageUrlString for the gallery.
 _IMAGE_SCALAR_KEYS = (
     "imageURL", "imageUrl", "imageName", "image",
     "largeImageURL", "largeImageUrl", "primaryImage",
@@ -348,8 +362,6 @@ def _looks_like_image_path(value: str) -> bool:
 
 
 def _split_image_string(value: str) -> List[str]:
-    """ShopGoodwill delimits multi-image strings with `;`. A few legacy
-    payloads use `,`. Split on either, drop empties."""
     if not value:
         return []
     pieces = value.replace(",", ";").split(";")
@@ -357,20 +369,6 @@ def _split_image_string(value: str) -> List[str]:
 
 
 def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
-    """Walk a ShopGoodwill item-detail payload and pull out every full-size
-    image URL.
-
-    Real-world payload (item 261359248) carries paths in `imageUrlString`
-    delimited by `;`, with Windows-style backslashes, e.g.::
-
-        "32\\Items\\2025-09-05\\abc_09051.png;32\\Items\\2025-09-05\\abc_09052.png;..."
-
-    `imageServer` in that response is
-    "https://shopgoodwillimages.azureedge.net/production/". The Azure CDN
-    requires forward slashes; _build_image_url normalizes them.
-    `thumbnailUrlString` exists too but holds *smaller* `t1.jpeg`-style
-    files, so we deliberately skip it here.
-    """
     if not isinstance(detail, dict):
         return []
     image_server = (
@@ -421,6 +419,70 @@ def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
     return out
 
 
+# ---------- description / notes extraction ----------
+
+_BLOCK_TAGS_RE = re.compile(
+    r'<\s*(br|/p|/li|/div|/h[1-6]|/tr|/table)\s*/?\s*>',
+    re.IGNORECASE,
+)
+_TAGS_RE = re.compile(r'<[^>]+>')
+
+_NOTE_BLOCKLIST = re.compile(
+    r'(\breturns?\b|\brefunds?\b|\bshipping\b|\bpolic(y|ies)\b|paypal|'
+    r'\binsurance\b|\brestocking\b|\bs&h\b|please\s+(note|see|contact)|'
+    r'thank you|good luck|happy bidding|customer service|tickets?|'
+    r'business days|\bverified\b|\bdistortion\b|gemologist|\bcertified\b|'
+    r'goodwill 2 ?go|goodwill\s+industries|donation|claim|address|'
+    r'authoriz|combined\s+shipping|warranty|disabilities|barriers'
+    r'|presents:|patronage|tampered|forfeit|signature required|'
+    r'\bAs Is\b|\bnot return\b|please\s+follow|please\s+be\s+advised|'
+    r'msrp|appraisal|appraised|professional|magnetic content|'
+    r'pickup\s+(instructions|policy)|combined|\.com\b|http)',
+    re.IGNORECASE,
+)
+
+_NOTE_LINE_RE = re.compile(r'^([^:]{2,30}?)\s*:\s*(.+)$')
+
+
+def _strip_html(value: str) -> str:
+    if not value:
+        return ""
+    text = _BLOCK_TAGS_RE.sub("\n", value)
+    text = _TAGS_RE.sub(" ", text)
+    text = html_module.unescape(text)
+    text = text.replace(" ", " ").replace("\xa0", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    return text
+
+
+def _extract_notes(html_description: str) -> List[str]:
+    """Pull "Label: value" item-spec lines from the HTML description, dropping
+    boilerplate (return policy, shipping, marketing)."""
+    text = _strip_html(html_description)
+    out: List[str] = []
+    seen = set()
+    for raw_line in re.split(r'[\n\r]+', text):
+        line = raw_line.strip(" \t-•* ")
+        if not line or len(line) > 140:
+            continue
+        m = _NOTE_LINE_RE.match(line)
+        if not m:
+            continue
+        label, value = m.group(1).strip(), m.group(2).strip()
+        if not value or len(value) > 100:
+            continue
+        if _NOTE_BLOCKLIST.search(line):
+            continue
+        norm = (label.lower(), value.lower())
+        if norm in seen:
+            continue
+        seen.add(norm)
+        out.append(f"{label}: {value}")
+        if len(out) >= 8:
+            break
+    return out
+
+
 def _fetch_item_detail(item_id: int) -> dict:
     headers = dict(DEFAULT_HEADERS)
     token = os.environ.get("SHOPGOODWILL_TOKEN")
@@ -446,6 +508,118 @@ def _fetch_item_detail(item_id: int) -> dict:
         raise HTTPException(
             status_code=502, detail=f"non-JSON ({resp.status_code}): {snippet}"
         )
+
+
+# ---------- eBay sold-listing comps ----------
+
+_TITLE_NOISE = re.compile(
+    r'\b(BEST\s+PRICE|NWT|NWOT|EUC|GUC|VTG|VINTAGE|RARE|SEALED|LOT\s+OF|'
+    r'NIB|MIB|VG\+?|NEW\s+WITH\s+TAGS|PREOWNED|PRE-OWNED|AS\s+IS)\b',
+    re.IGNORECASE,
+)
+
+
+def _clean_title_for_comps(title: str) -> str:
+    if not title:
+        return ""
+    cleaned = _TITLE_NOISE.sub(" ", title)
+    cleaned = re.sub(r"[\(\)\[\]\{\}]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:90]
+
+
+def _shorten_title(title: str) -> str:
+    """Take the first 5-6 significant words for a fallback narrower search."""
+    words = [w for w in title.split() if len(w) >= 2]
+    if len(words) <= 5:
+        return title
+    return " ".join(words[:6])
+
+
+def _ebay_search_sold(query: str) -> Optional[dict]:
+    if len(query) < 4:
+        return None
+    try:
+        resp = requests.get(
+            "https://www.ebay.com/sch/i.html",
+            params={
+                "_nkw": query,
+                "LH_Sold": "1",
+                "LH_Complete": "1",
+                "_sop": "13",  # sort: ended recently
+                "_ipg": "60",  # 60 per page
+            },
+            headers=BROWSER_HEADERS,
+            timeout=12,
+        )
+    except requests.RequestException:
+        return None
+    if not resp.ok:
+        return None
+
+    body = resp.text or ""
+    # Pull the price spans. eBay's class is "s-item__price"; the very first
+    # "Shop on eBay" promo card has its own price block we want to skip.
+    raw_prices: List[float] = []
+    for m in re.finditer(r's-item__price[^>]*>([^<]+)<', body):
+        snippet = m.group(1)
+        for v in re.findall(r'\$\s*([0-9,]+(?:\.\d{2})?)', snippet):
+            try:
+                raw_prices.append(float(v.replace(",", "")))
+            except ValueError:
+                continue
+    # eBay tends to repeat the promo card price; drop the first if we got many.
+    if len(raw_prices) >= 6:
+        raw_prices = raw_prices[1:]
+
+    # Need at least a handful of data points for a meaningful number.
+    if len(raw_prices) < 3:
+        return None
+
+    raw_prices.sort()
+    n = len(raw_prices)
+    median = raw_prices[n // 2] if n % 2 else (raw_prices[n // 2 - 1] + raw_prices[n // 2]) / 2
+
+    # Trim wild outliers (>3x or <0.2x median) before reporting low/high.
+    filtered = [p for p in raw_prices if 0.2 * median <= p <= 3 * median]
+    if len(filtered) < 3:
+        filtered = raw_prices
+
+    return {
+        "query": query,
+        "count": len(filtered),
+        "median": round(median, 2),
+        "low": round(filtered[0], 2),
+        "high": round(filtered[-1], 2),
+    }
+
+
+_COMPS_CACHE: Dict[str, Dict[str, Any]] = {}
+_COMPS_TTL = 600  # 10 minutes
+
+
+def _ebay_comps(title: str) -> Optional[dict]:
+    cleaned = _clean_title_for_comps(title)
+    if not cleaned:
+        return None
+
+    cache = _COMPS_CACHE.get(cleaned)
+    if cache and (time.time() - cache["t"] < _COMPS_TTL):
+        return cache["v"]
+
+    result = _ebay_search_sold(cleaned)
+    if not result or result.get("count", 0) < 3:
+        short = _shorten_title(cleaned)
+        if short and short != cleaned:
+            fallback = _ebay_search_sold(short)
+            if fallback and fallback.get("count", 0) >= 3:
+                result = fallback
+
+    _COMPS_CACHE[cleaned] = {"v": result, "t": time.time()}
+    if len(_COMPS_CACHE) > 200:
+        for k in list(_COMPS_CACHE.keys())[:50]:
+            _COMPS_CACHE.pop(k, None)
+    return result
 
 
 # ---------- storage (Supabase REST or local file) ----------
@@ -576,15 +750,49 @@ def get_feed(
 @app.get("/api/item/{item_id}")
 def get_item(item_id: int):
     detail = _fetch_item_detail(item_id)
+    if not isinstance(detail, dict):
+        return {"id": item_id, "images": [], "notes": []}
     images = _extract_gallery(detail)
-    title = (detail.get("title") or detail.get("itemTitle") or "").strip() if isinstance(detail, dict) else ""
-    return {"id": item_id, "title": title, "images": images}
+    title = (detail.get("title") or detail.get("itemTitle") or "").strip()
+    notes = _extract_notes(detail.get("description") or "")
+    city = (detail.get("pickupCity") or "").strip()
+    state = (detail.get("pickupState") or "").strip()
+    location = ", ".join(p for p in [city, state] if p)
+    seller = (detail.get("sellerCompanyName") or "").strip()
+    buy_now = float(detail.get("buyNowPrice") or 0) or None
+    shipping = float(detail.get("shippingPrice") or detail.get("defaultShippingPrice") or 0) or None
+    handling = float(detail.get("handlingPrice") or 0) or None
+    return {
+        "id": item_id,
+        "title": title,
+        "images": images,
+        "notes": notes,
+        "location": location,
+        "seller": seller,
+        "buy_now_price": buy_now,
+        "shipping_price": shipping,
+        "handling_price": handling,
+    }
 
 
 @app.get("/api/item/{item_id}/raw")
 def get_item_raw(item_id: int):
     """Diagnostic: return the upstream item detail payload as-is."""
     return _fetch_item_detail(item_id)
+
+
+@app.get("/api/comps")
+def api_comps(title: str = Query(..., min_length=3)):
+    """Recent eBay sold-listing comps for the given item title.
+
+    Best-effort scrape of public sold-listing search results. eBay can rate-
+    limit or change their HTML at any time; callers should treat a missing
+    response as "no estimate available" rather than an error.
+    """
+    comps = _ebay_comps(title)
+    if not comps:
+        return {"ok": False, "reason": "no comps found", "query": _clean_title_for_comps(title)}
+    return {"ok": True, **comps}
 
 
 @app.post("/api/bid")

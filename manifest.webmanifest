@@ -1,13 +1,13 @@
 {
-  "name": "Sarah's Thrift Feed",
-  "short_name": "Thrift",
+  "name": "Goodwill Hunting",
+  "short_name": "Hunting",
   "description": "A swipeable feed of brand-pinned thrift finds from ShopGoodwill.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#fafaf7",
-  "theme_color": "#1a1d2e",
+  "theme_color": "#fafaf7",
   "icons": [
     {
       "src": "/icon.svg",
