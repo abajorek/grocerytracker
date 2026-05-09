@@ -184,30 +184,44 @@ DEFAULT_HEADERS = {
 
 
 def _shopgoodwill_payload(query: str, page: int, page_size: int) -> dict:
+    """Match the live shopgoodwill.com search payload shape (April 2026).
+    Field set comes from scottmconway/shopgoodwill-scripts config example.
+    Note: ShopGoodwill ignores `page`/`pageSize` for some queries and
+    paginates internally; we still send them for safety."""
     return {
         "isSize": False,
         "isWeddingCatagory": "false",
         "isMultipleCategoryIds": False,
         "isFromHeaderMenuTab": False,
         "layout": "",
-        "searchText": query,
-        "selectedCategoryIds": "",
+        "searchText": query.replace('"', ""),
         "selectedGroup": "",
+        "selectedCategoryIds": "",
         "selectedSellerIds": "",
+        "lowPrice": "0",
+        "highPrice": "999999",
+        "searchBuyNowOnly": "",
+        "searchPickupOnly": "false",
+        "searchNoPickupOnly": "false",
+        "searchOneCentShippingOnly": "false",
+        "searchDescriptions": "false",
+        "searchClosedAuctions": "false",
+        "closedAuctionEndingDate": "1/1/0001",
+        "closedAuctionDaysBack": "7",
+        "searchCanadaShipping": "false",
+        "searchInternationalShippingOnly": "false",
         "sortColumn": "1",
-        "sortDirection": "asc",
+        "sortDescending": "false",
+        "savedSearchId": 0,
+        "useBuyerPrefs": "true",
+        "searchUSOnlyShipping": "false",
+        "categoryLevelNo": "1",
+        "categoryLevel": 1,
+        "categoryId": 0,
+        "partNumber": "",
+        "catIds": "",
         "page": int(page),
         "pageSize": int(page_size),
-        "savedSearchId": 0,
-        "highBidRange": "",
-        "lowBidRange": "",
-        "highPrice": "999999",
-        "lowPrice": "0",
-        "categoryName": "",
-        "categoryId": 0,
-        "categoryLevel": 0,
-        "categoryLevelNo": "1",
-        "isMultipleSearch": False,
     }
 
 
