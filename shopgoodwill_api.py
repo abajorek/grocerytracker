@@ -1233,10 +1233,35 @@ def api_login(req: LoginRequest):
     data = _shopgoodwill_login(username, req.password, remember=req.remember)
     token = _extract_token_from_login(data)
     if not token:
-        keys = ", ".join(list(data.keys())[:8]) if isinstance(data, dict) else "<non-dict>"
+        # Diagnostic-grade error: include type/length/short prefix of each
+        # token-shaped field so we can see what ShopGoodwill actually returned
+        # without leaking the full credential.
+        def _describe(v):
+            if v is None:
+                return "null"
+            if isinstance(v, str):
+                preview = v[:6] + ("…" if len(v) > 6 else "")
+                return f"str(len={len(v)}, prefix={preview!r})"
+            return f"{type(v).__name__}({v!r})"
+
+        candidates = []
+        if isinstance(data, dict):
+            for key in ("accessToken", "access_token", "token", "authToken", "jwt"):
+                if key in data:
+                    candidates.append(f"{key}={_describe(data.get(key))}")
+            inner = data.get("data")
+            if isinstance(inner, dict):
+                for key in ("accessToken", "access_token", "token", "authToken", "jwt"):
+                    if key in inner:
+                        candidates.append(f"data.{key}={_describe(inner.get(key))}")
+        keys = ", ".join(list(data.keys())[:10]) if isinstance(data, dict) else "<non-dict>"
+        cand_str = "; ".join(candidates) if candidates else "<no candidate fields>"
         raise HTTPException(
             status_code=502,
-            detail=f"Login succeeded but no JWT in response (keys: {keys}).",
+            detail=(
+                f"Login response had no usable token. Top-level keys: {keys}. "
+                f"Candidates: {cand_str}"
+            ),
         )
     display_name = _extract_display_name(data, username)
     saved = _save_session_auth(token, display_name)
