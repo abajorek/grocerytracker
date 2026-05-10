@@ -155,7 +155,7 @@ _FRAME_INJECTION = (
     "}catch(e){}})()</script>"
     "<script src=\"/picks.js?v=4\"></script>"
     "<script src=\"/snipe.js?v=1\"></script>"
-    "<script src=\"/auth.js?v=1\"></script>"
+    "<script src=\"/auth.js?v=2\"></script>"
 )
 
 
@@ -446,12 +446,39 @@ def _extract_token_from_login(data: dict) -> Optional[str]:
         return None
     for key in ("accessToken", "access_token", "token", "authToken", "jwt"):
         v = data.get(key)
-        if isinstance(v, str) and v.startswith("eyJ"):
+        # Accept any non-trivial string. ShopGoodwill's accessToken is a
+        # GUID-like string, not a standard JWT prefixed with "eyJ".
+        if isinstance(v, str) and len(v) >= 16:
             return v
     inner = data.get("data")
     if isinstance(inner, dict):
         return _extract_token_from_login(inner)
     return None
+
+
+def _extract_display_name(data: dict, fallback: str) -> str:
+    """Pull the friendliest display name we can from the login response.
+    ShopGoodwill nests user info under a `buyer` object."""
+    if not isinstance(data, dict):
+        return fallback
+    for key in ("username", "userName", "name", "displayName"):
+        v = data.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    buyer = data.get("buyer")
+    if isinstance(buyer, dict):
+        for key in ("username", "userName", "name", "displayName", "email"):
+            v = buyer.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        first = (buyer.get("firstName") or "").strip()
+        last = (buyer.get("lastName") or "").strip()
+        if first or last:
+            return (first + " " + last).strip()
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        return _extract_display_name(inner, fallback)
+    return fallback
 
 
 # ---------- shopgoodwill core ----------
@@ -1206,27 +1233,20 @@ def api_login(req: LoginRequest):
     data = _shopgoodwill_login(username, req.password, remember=req.remember)
     token = _extract_token_from_login(data)
     if not token:
-        # Best-effort error message: surface the response keys so we can debug
-        # without ever logging the password.
         keys = ", ".join(list(data.keys())[:8]) if isinstance(data, dict) else "<non-dict>"
         raise HTTPException(
             status_code=502,
             detail=f"Login succeeded but no JWT in response (keys: {keys}).",
         )
-    display_name = ""
-    if isinstance(data, dict):
-        display_name = (
-            data.get("username") or data.get("userName")
-            or data.get("name") or data.get("displayName") or ""
-        )
-        inner = data.get("data")
-        if not display_name and isinstance(inner, dict):
-            display_name = (
-                inner.get("username") or inner.get("userName")
-                or inner.get("name") or inner.get("displayName") or ""
-            )
-    saved = _save_session_auth(token, str(display_name or username))
-    return {"ok": True, "username": saved["username"], "source": "session"}
+    display_name = _extract_display_name(data, username)
+    saved = _save_session_auth(token, display_name)
+    unconfirmed = bool(isinstance(data, dict) and data.get("isUnconfirmedBuyer"))
+    return {
+        "ok": True,
+        "username": saved["username"],
+        "source": "session",
+        "unconfirmed": unconfirmed,
+    }
 
 
 @app.post("/api/logout")
