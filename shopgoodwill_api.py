@@ -2,28 +2,18 @@
 """
 Goodwill Hunting - ShopGoodwill TikTok-style backend
 
-Wraps ShopGoodwill's public ItemListing search and stores pinned brands +
-saved listings. Storage gracefully degrades:
+See module docstring in earlier commits; only the picks bits and
+frame-injection bits are summarised here.
 
-  * If SUPABASE_URL + SUPABASE_KEY are set, persists via Supabase's REST
-    API (PostgREST). No Postgres driver required.
-  * Otherwise falls back to local JSON files in ./data/ (dev mode).
+For /api/retail (Claude vision retail-price lookup) set ANTHROPIC_API_KEY.
+For Andy's Picks (saved-search fan-out) edit DEFAULT_PICKS or POST a new
+list to /api/picks. Cold-start cost is ~3-4 sec per page of 12 saved
+searches; per-pick results cache for 5 minutes.
 
-Local:
-    pip install -r requirements.txt
-    python shopgoodwill_api.py
-
-Production (Render / Railway / Fly):
-    uvicorn shopgoodwill_api:app --host 0.0.0.0 --port $PORT
-
-If anonymous ShopGoodwill search starts returning 401, set
-SHOPGOODWILL_TOKEN to a JWT lifted from a logged-in browser session.
-The same token is required for /api/bid (placing real bids).
-
-For /api/retail (Claude-vision-powered retail price lookup), set
-ANTHROPIC_API_KEY. Optional: ANTHROPIC_MODEL (defaults to
-claude-haiku-4-5-20251001 for cost; switch to claude-sonnet-4-6 for
-sharper product identification).
+The / route now wraps the inline shopgoodwill_feed.html with a tiny
+shim that exposes `state` on window plus a <script src="/picks.js">
+tag, so the picks UI lives in a separate file without touching the
+large HTML monolith.
 """
 
 import html as html_module
@@ -45,7 +35,7 @@ except Exception:  # pragma: no cover
 import requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 
@@ -59,6 +49,7 @@ FAVORITES_FILE = DATA_DIR / "favorites.json"
 BRANDS_FILE = DATA_DIR / "brands.json"
 PICKS_FILE = DATA_DIR / "picks.json"
 FRONTEND_FILE = ROOT / "shopgoodwill_feed.html"
+PICKS_JS_FILE = ROOT / "picks.js"
 MANIFEST_FILE = ROOT / "manifest.webmanifest"
 ICON_FILE = ROOT / "icon.svg"
 
@@ -137,7 +128,6 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or ""
 ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip()
 
-# (sortColumn, sortDescending) tuples that match ShopGoodwill's web UI.
 SORT_OPTIONS: Dict[str, tuple] = {
     "ending_soon":  ("1", "false"),
     "newly_listed": ("4", "true"),
@@ -148,6 +138,15 @@ SORT_OPTIONS: Dict[str, tuple] = {
 
 _PICKS_CACHE: Dict[str, Dict[str, Any]] = {}
 _PICKS_TTL = 300  # 5 min per-pick
+
+# Injected before </body> on the served HTML so picks.js can monkey-patch
+# the inline app. The shim exposes `state` on window because the inline
+# app declares it with `const`, which would otherwise be script-scoped.
+_FRAME_INJECTION = (
+    "<script>(function(){try{window.state=state;"
+    "window.apiGet=apiGet;window.renderError=renderError;}catch(e){}})()</script>"
+    "<script src=\"/picks.js?v=2\"></script>"
+)
 
 
 class FeedItem(BaseModel):
@@ -189,8 +188,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ---------- helpers ----------
 
 def _read_json(path: Path, default):
     if not path.exists():
@@ -342,49 +339,33 @@ def _build_search_payload(
     }
 
 
-def _shopgoodwill_request(
-    *, query: str, page: int, page_size: int, **filters: Any
-) -> requests.Response:
+def _shopgoodwill_request(*, query: str, page: int, page_size: int, **filters: Any) -> requests.Response:
     headers = dict(DEFAULT_HEADERS)
     token = os.environ.get("SHOPGOODWILL_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    payload = _build_search_payload(
-        query=query, page=page, page_size=page_size, **filters,
-    )
+    payload = _build_search_payload(query=query, page=page, page_size=page_size, **filters)
     return requests.post(
         f"{SHOPGOODWILL_BASE}/Search/ItemListing",
-        json=payload,
-        headers=headers,
-        timeout=20,
+        json=payload, headers=headers, timeout=20,
     )
 
 
-def _search_shopgoodwill(
-    query: str, page: int = 1, page_size: int = 40, **filters: Any
-) -> List[dict]:
+def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40, **filters: Any) -> List[dict]:
     try:
-        resp = _shopgoodwill_request(
-            query=query, page=page, page_size=page_size, **filters,
-        )
+        resp = _shopgoodwill_request(query=query, page=page, page_size=page_size, **filters)
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
 
     if not resp.ok:
         body = (resp.text or "")[:240].replace("\n", " ")
-        raise HTTPException(
-            status_code=502,
-            detail=f"ShopGoodwill returned {resp.status_code}: {body}",
-        )
+        raise HTTPException(status_code=502, detail=f"ShopGoodwill returned {resp.status_code}: {body}")
 
     try:
         data = resp.json()
     except ValueError:
         snippet = (resp.text or "")[:240].replace("\n", " ")
-        raise HTTPException(
-            status_code=502,
-            detail=f"ShopGoodwill returned non-JSON ({resp.status_code}): {snippet}",
-        )
+        raise HTTPException(status_code=502, detail=f"ShopGoodwill returned non-JSON ({resp.status_code}): {snippet}")
 
     if isinstance(data, dict):
         if "searchResults" in data and isinstance(data["searchResults"], dict):
@@ -417,7 +398,6 @@ def _place_bid(item_id: int, amount: float, quantity: int = 1) -> dict:
         )
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
-
     if resp.status_code in (401, 403):
         raise HTTPException(
             status_code=401,
@@ -428,11 +408,7 @@ def _place_bid(item_id: int, amount: float, quantity: int = 1) -> dict:
         )
     if not resp.ok:
         body = (resp.text or "")[:300].replace("\n", " ")
-        raise HTTPException(
-            status_code=502,
-            detail=f"ShopGoodwill returned {resp.status_code}: {body}",
-        )
-
+        raise HTTPException(status_code=502, detail=f"ShopGoodwill returned {resp.status_code}: {body}")
     try:
         return resp.json()
     except ValueError:
@@ -477,7 +453,6 @@ def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
     )
     seen: set = set()
     out: List[str] = []
-
     def push(raw: Any):
         if not isinstance(raw, str):
             return
@@ -494,11 +469,9 @@ def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
             return
         seen.add(url)
         out.append(url)
-
     for key in _IMAGE_SCALAR_KEYS:
         if key in detail:
             push(detail.get(key))
-
     for key in _IMAGE_LIST_KEYS:
         items = detail.get(key)
         if isinstance(items, str):
@@ -513,18 +486,11 @@ def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
                         if k in it:
                             push(it[k])
                             break
-
     return out
 
 
-# ---------- description / notes extraction ----------
-
-_BLOCK_TAGS_RE = re.compile(
-    r'<\s*(br|/p|/li|/div|/h[1-6]|/tr|/table)\s*/?\s*>',
-    re.IGNORECASE,
-)
+_BLOCK_TAGS_RE = re.compile(r'<\s*(br|/p|/li|/div|/h[1-6]|/tr|/table)\s*/?\s*>', re.IGNORECASE)
 _TAGS_RE = re.compile(r'<[^>]+>')
-
 _NOTE_BLOCKLIST = re.compile(
     r'(\breturns?\b|\brefunds?\b|\bshipping\b|\bpolic(y|ies)\b|paypal|'
     r'\binsurance\b|\brestocking\b|\bs&h\b|please\s+(note|see|contact)|'
@@ -538,7 +504,6 @@ _NOTE_BLOCKLIST = re.compile(
     r'pickup\s+(instructions|policy)|combined|\.com\b|http)',
     re.IGNORECASE,
 )
-
 _NOTE_LINE_RE = re.compile(r'^([^:]{2,30}?)\s*:\s*(.+)$')
 
 
@@ -548,7 +513,7 @@ def _strip_html(value: str) -> str:
     text = _BLOCK_TAGS_RE.sub("\n", value)
     text = _TAGS_RE.sub(" ", text)
     text = html_module.unescape(text)
-    text = text.replace(" ", " ").replace("\xa0", " ")
+    text = text.replace(" ", " ").replace("\xa0", " ")
     text = re.sub(r"[ \t]+", " ", text)
     return text
 
@@ -558,7 +523,7 @@ def _extract_notes(html_description: str) -> List[str]:
     out: List[str] = []
     seen = set()
     for raw_line in re.split(r'[\n\r]+', text):
-        line = raw_line.strip(" \t-•* ")
+        line = raw_line.strip(" \t-•* ")
         if not line or len(line) > 140:
             continue
         m = _NOTE_LINE_RE.match(line)
@@ -580,14 +545,13 @@ def _extract_notes(html_description: str) -> List[str]:
 
 
 _DETAIL_CACHE: Dict[int, Dict[str, Any]] = {}
-_DETAIL_TTL = 1800  # 30 min
+_DETAIL_TTL = 1800
 
 
 def _fetch_item_detail(item_id: int) -> dict:
     cached = _DETAIL_CACHE.get(item_id)
     if cached and time.time() - cached["t"] < _DETAIL_TTL:
         return cached["v"]
-
     headers = dict(DEFAULT_HEADERS)
     token = os.environ.get("SHOPGOODWILL_TOKEN")
     if token:
@@ -601,18 +565,12 @@ def _fetch_item_detail(item_id: int) -> dict:
         raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
     if not resp.ok:
         body = (resp.text or "")[:240].replace("\n", " ")
-        raise HTTPException(
-            status_code=502,
-            detail=f"ShopGoodwill returned {resp.status_code}: {body}",
-        )
+        raise HTTPException(status_code=502, detail=f"ShopGoodwill returned {resp.status_code}: {body}")
     try:
         data = resp.json()
     except ValueError:
         snippet = (resp.text or "")[:240].replace("\n", " ")
-        raise HTTPException(
-            status_code=502, detail=f"non-JSON ({resp.status_code}): {snippet}"
-        )
-
+        raise HTTPException(status_code=502, detail=f"non-JSON ({resp.status_code}): {snippet}")
     _DETAIL_CACHE[item_id] = {"v": data, "t": time.time()}
     if len(_DETAIL_CACHE) > 200:
         for k in list(_DETAIL_CACHE.keys())[:50]:
@@ -620,11 +578,8 @@ def _fetch_item_detail(item_id: int) -> dict:
     return data
 
 
-# ---------- retail-price lookup via Claude vision ----------
-
 _RETAIL_CACHE: Dict[int, Dict[str, Any]] = {}
-_RETAIL_TTL = 86400  # 24h
-
+_RETAIL_TTL = 86400
 _RETAIL_PROMPT = (
     "You are identifying a thrift-store auction listing. Use BOTH the photo "
     "and the title together to identify the *specific* product (e.g. not "
@@ -684,27 +639,14 @@ def _parse_retail_json(text: str) -> Optional[dict]:
 
 def _retail_estimate(item_id: int, title: str, brand: str, image_url: str) -> dict:
     if not ANTHROPIC_API_KEY:
-        return {
-            "ok": False,
-            "reason": (
-                "ANTHROPIC_API_KEY is not set on the server. Add it in "
-                "Render → Environment to enable retail-price lookup."
-            ),
-        }
-
+        return {"ok": False, "reason": "ANTHROPIC_API_KEY is not set on the server. Add it in Render → Environment to enable retail-price lookup."}
     cached = _RETAIL_CACHE.get(item_id)
     if cached and time.time() - cached["t"] < _RETAIL_TTL:
         return cached["v"]
-
     if not image_url or not image_url.startswith("http"):
         return {"ok": False, "reason": "no image URL available for this item"}
-
     brand_line = f"Brand: {brand}\n" if brand else ""
-    prompt = _RETAIL_PROMPT.format(
-        title=(title or "(no title)")[:200],
-        brand_line=brand_line,
-    )
-
+    prompt = _RETAIL_PROMPT.format(title=(title or "(no title)")[:200], brand_line=brand_line)
     body = {
         "model": ANTHROPIC_MODEL,
         "max_tokens": 400,
@@ -716,7 +658,6 @@ def _retail_estimate(item_id: int, title: str, brand: str, image_url: str) -> di
             ],
         }],
     }
-
     try:
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -725,38 +666,25 @@ def _retail_estimate(item_id: int, title: str, brand: str, image_url: str) -> di
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
             },
-            json=body,
-            timeout=25,
+            json=body, timeout=25,
         )
     except requests.RequestException as exc:
         return {"ok": False, "reason": f"network: {exc}"}
-
     if not resp.ok:
         snippet = (resp.text or "")[:240].replace("\n", " ")
-        return {
-            "ok": False,
-            "reason": f"Anthropic API {resp.status_code}: {snippet}",
-        }
-
+        return {"ok": False, "reason": f"Anthropic API {resp.status_code}: {snippet}"}
     try:
         data = resp.json()
     except ValueError:
         return {"ok": False, "reason": "non-JSON response from Anthropic"}
-
     text_parts = []
     for block in data.get("content", []) or []:
         if isinstance(block, dict) and block.get("type") == "text":
             text_parts.append(block.get("text", ""))
     raw_text = "".join(text_parts).strip()
-
     parsed = _parse_retail_json(raw_text)
     if not parsed:
-        return {
-            "ok": False,
-            "reason": "couldn't parse retail JSON from model",
-            "raw": raw_text[:240],
-        }
-
+        return {"ok": False, "reason": "couldn't parse retail JSON from model", "raw": raw_text[:240]}
     result = {"ok": True, "model": ANTHROPIC_MODEL, **parsed}
     _RETAIL_CACHE[item_id] = {"v": result, "t": time.time()}
     if len(_RETAIL_CACHE) > 500:
@@ -764,8 +692,6 @@ def _retail_estimate(item_id: int, title: str, brand: str, image_url: str) -> di
             _RETAIL_CACHE.pop(k, None)
     return result
 
-
-# ---------- storage (Supabase REST or local file) ----------
 
 def _supabase_enabled() -> bool:
     return bool(SUPABASE_URL and SUPABASE_KEY)
@@ -782,8 +708,7 @@ def _supabase(method: str, path: str, *, body=None, params=None, prefer: Optiona
         headers["Prefer"] = prefer
     try:
         resp = requests.request(
-            method,
-            f"{SUPABASE_URL}/rest/v1/{path}",
+            method, f"{SUPABASE_URL}/rest/v1/{path}",
             headers=headers, params=params, json=body, timeout=15,
         )
     except requests.RequestException as exc:
@@ -800,10 +725,7 @@ def _supabase(method: str, path: str, *, body=None, params=None, prefer: Optiona
 
 def store_get_brands() -> List[str]:
     if _supabase_enabled():
-        rows = _supabase(
-            "GET", "thrift_settings",
-            params={"key": "eq.brands", "select": "value"},
-        )
+        rows = _supabase("GET", "thrift_settings", params={"key": "eq.brands", "select": "value"})
         if rows and rows[0].get("value"):
             value = rows[0]["value"]
             if isinstance(value, list):
@@ -815,11 +737,9 @@ def store_get_brands() -> List[str]:
 def store_set_brands(brands: List[str]) -> List[str]:
     cleaned = [b.strip() for b in brands if b and b.strip()]
     if _supabase_enabled():
-        _supabase(
-            "POST", "thrift_settings",
-            body={"key": "brands", "value": cleaned},
-            prefer="return=minimal,resolution=merge-duplicates",
-        )
+        _supabase("POST", "thrift_settings",
+                  body={"key": "brands", "value": cleaned},
+                  prefer="return=minimal,resolution=merge-duplicates")
         return cleaned
     _write_json(BRANDS_FILE, cleaned)
     return cleaned
@@ -827,10 +747,7 @@ def store_set_brands(brands: List[str]) -> List[str]:
 
 def store_list_favorites() -> list:
     if _supabase_enabled():
-        return _supabase(
-            "GET", "thrift_favorites",
-            params={"select": "*", "order": "saved_at.desc"},
-        )
+        return _supabase("GET", "thrift_favorites", params={"select": "*", "order": "saved_at.desc"})
     return _read_json(FAVORITES_FILE, [])
 
 
@@ -844,11 +761,8 @@ def store_add_favorite(fav: Favorite) -> list:
         "saved_at": fav.saved_at,
     }
     if _supabase_enabled():
-        _supabase(
-            "POST", "thrift_favorites",
-            body=payload,
-            prefer="return=minimal,resolution=merge-duplicates",
-        )
+        _supabase("POST", "thrift_favorites", body=payload,
+                  prefer="return=minimal,resolution=merge-duplicates")
         return store_list_favorites()
     favs = _read_json(FAVORITES_FILE, [])
     if not any(f.get("item_id") == fav.item_id for f in favs):
@@ -859,10 +773,7 @@ def store_add_favorite(fav: Favorite) -> list:
 
 def store_remove_favorite(item_id: int) -> list:
     if _supabase_enabled():
-        _supabase(
-            "DELETE", "thrift_favorites",
-            params={"item_id": f"eq.{item_id}"},
-        )
+        _supabase("DELETE", "thrift_favorites", params={"item_id": f"eq.{item_id}"})
         return store_list_favorites()
     favs = _read_json(FAVORITES_FILE, [])
     remaining = [f for f in favs if f.get("item_id") != item_id]
@@ -870,14 +781,10 @@ def store_remove_favorite(item_id: int) -> list:
     return remaining
 
 
-# ---------- Andy's Picks (saved-search fan-out) ----------
-
 _SIZE_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9\-/]*")
 
 
 def _match_size_hints(title: str, hints: List[str]) -> bool:
-    """Return True if the listing title contains any of the size hints
-    as a standalone token. Avoids 'L' matching inside 'wool'."""
     if not hints:
         return True
     title_lower = (title or "").lower()
@@ -895,10 +802,7 @@ def _match_size_hints(title: str, hints: List[str]) -> bool:
 
 def store_get_picks() -> List[dict]:
     if _supabase_enabled():
-        rows = _supabase(
-            "GET", "thrift_settings",
-            params={"key": "eq.picks", "select": "value"},
-        )
+        rows = _supabase("GET", "thrift_settings", params={"key": "eq.picks", "select": "value"})
         if rows and rows[0].get("value"):
             value = rows[0]["value"]
             if isinstance(value, list):
@@ -933,13 +837,10 @@ def store_set_picks(picks: List[dict]) -> List[dict]:
         if isinstance(hints, list):
             entry["size_hints"] = [str(h).strip() for h in hints if str(h).strip()]
         cleaned.append(entry)
-
     if _supabase_enabled():
-        _supabase(
-            "POST", "thrift_settings",
-            body={"key": "picks", "value": cleaned},
-            prefer="return=minimal,resolution=merge-duplicates",
-        )
+        _supabase("POST", "thrift_settings",
+                  body={"key": "picks", "value": cleaned},
+                  prefer="return=minimal,resolution=merge-duplicates")
     else:
         _write_json(PICKS_FILE, cleaned)
     return cleaned
@@ -950,18 +851,14 @@ def _search_one_pick(pick: dict) -> List[FeedItem]:
     cached = _PICKS_CACHE.get(cache_key)
     if cached and time.time() - cached["t"] < _PICKS_TTL:
         return cached["v"]
-
     label = (pick.get("name") or pick.get("query") or "Pick").strip()
     query = (pick.get("query") or "").strip()
     if not query:
         _PICKS_CACHE[cache_key] = {"v": [], "t": time.time()}
         return []
-
     try:
         raw_items = _search_shopgoodwill(
-            query,
-            page=1,
-            page_size=24,
+            query, page=1, page_size=24,
             price_max=float(pick.get("price_max") or 0),
             no_pickup=True,
         )
@@ -969,7 +866,6 @@ def _search_one_pick(pick: dict) -> List[FeedItem]:
         return []
     except Exception:
         return []
-
     hints = pick.get("size_hints") or []
     items: List[FeedItem] = []
     for raw in raw_items:
@@ -982,7 +878,6 @@ def _search_one_pick(pick: dict) -> List[FeedItem]:
         if hints and not _match_size_hints(normalized.title, hints):
             continue
         items.append(normalized)
-
     _PICKS_CACHE[cache_key] = {"v": items, "t": time.time()}
     if len(_PICKS_CACHE) > 200:
         for k in list(_PICKS_CACHE.keys())[:50]:
@@ -990,15 +885,13 @@ def _search_one_pick(pick: dict) -> List[FeedItem]:
     return items
 
 
-# ---------- routes ----------
-
 @app.get("/api/feed", response_model=List[FeedItem])
 def get_feed(
     brand: str = Query(""),
     page: int = Query(1, ge=1),
     page_size: int = Query(40, ge=1, le=100),
-    q: str = Query("", description="Free-text search refinement"),
-    sort: str = Query("ending_soon", description="Sort key"),
+    q: str = Query(""),
+    sort: str = Query("ending_soon"),
     price_min: float = Query(0, ge=0),
     price_max: float = Query(0, ge=0),
     buy_now_only: bool = Query(False),
@@ -1013,18 +906,11 @@ def get_feed(
     if not parts:
         raise HTTPException(status_code=400, detail="Provide brand or q (search query)")
     search_text = " ".join(parts)
-
     raw_items = _search_shopgoodwill(
-        search_text,
-        page=page,
-        page_size=page_size,
-        sort=sort,
-        price_min=price_min,
-        price_max=price_max,
-        buy_now_only=buy_now_only,
-        no_pickup=no_pickup,
-        include_closed=include_closed,
-        closed_days_back=closed_days_back,
+        search_text, page=page, page_size=page_size,
+        sort=sort, price_min=price_min, price_max=price_max,
+        buy_now_only=buy_now_only, no_pickup=no_pickup,
+        include_closed=include_closed, closed_days_back=closed_days_back,
     )
     items: List[FeedItem] = []
     label = brand or q
@@ -1057,31 +943,19 @@ def get_item(item_id: int):
     shipping = float(detail.get("shippingPrice") or detail.get("defaultShippingPrice") or 0) or None
     handling = float(detail.get("handlingPrice") or 0) or None
     return {
-        "id": item_id,
-        "title": title,
-        "images": images,
-        "notes": notes,
-        "location": location,
-        "seller": seller,
-        "buy_now_price": buy_now,
-        "shipping_price": shipping,
-        "handling_price": handling,
+        "id": item_id, "title": title, "images": images, "notes": notes,
+        "location": location, "seller": seller,
+        "buy_now_price": buy_now, "shipping_price": shipping, "handling_price": handling,
     }
 
 
 @app.get("/api/item/{item_id}/raw")
 def get_item_raw(item_id: int):
-    """Diagnostic: return the upstream item detail payload as-is."""
     return _fetch_item_detail(item_id)
 
 
 @app.get("/api/retail")
 def api_retail(item_id: int, brand: str = ""):
-    """Estimate the retail (new) price for a specific listing using
-    Claude vision. Pass `item_id` (required) and optional `brand` hint.
-
-    Requires ANTHROPIC_API_KEY env var. Cached per item_id for 24h.
-    """
     detail = _fetch_item_detail(item_id)
     title = (detail.get("title") or "").strip() if isinstance(detail, dict) else ""
     images = _extract_gallery(detail) if isinstance(detail, dict) else []
@@ -1100,11 +974,10 @@ def debug_upstream(brand: str = "Coach", page: int = 1, page_size: int = 5):
         resp = _shopgoodwill_request(query=brand, page=page, page_size=page_size)
     except requests.RequestException as exc:
         return {"network_error": str(exc)}
-    snippet = (resp.text or "")[:600]
     return {
         "status": resp.status_code,
         "content_type": resp.headers.get("Content-Type", ""),
-        "body_snippet": snippet,
+        "body_snippet": (resp.text or "")[:600],
         "has_token": bool(os.environ.get("SHOPGOODWILL_TOKEN")),
     }
 
@@ -1121,13 +994,11 @@ def set_brands(brands: List[str]):
 
 @app.get("/api/picks")
 def list_picks():
-    """List Andy's saved searches."""
     return store_get_picks()
 
 
 @app.post("/api/picks")
 def save_picks(picks: List[Dict[str, Any]]):
-    """Replace the saved-search list."""
     return store_set_picks(picks)
 
 
@@ -1136,9 +1007,6 @@ def picks_feed(
     page: int = Query(1, ge=1),
     picks_per_page: int = Query(12, ge=1, le=24),
 ):
-    """Run a chunk of Andy's saved searches in parallel and return the
-    combined results sorted by ending soonest. Pagination chunks the
-    saved-search list (not items) so the first page returns quickly."""
     picks = store_get_picks()
     if not picks:
         return []
@@ -1147,12 +1015,10 @@ def picks_feed(
     chunk = picks[start:end]
     if not chunk:
         return []
-
     all_items: List[FeedItem] = []
     with ThreadPoolExecutor(max_workers=4) as pool:
         for batch in pool.map(_search_one_pick, chunk):
             all_items.extend(batch)
-
     seen: set = set()
     deduped: List[FeedItem] = []
     for it in sorted(
@@ -1196,11 +1062,21 @@ def health():
     }
 
 
-@app.get("/")
+@app.get("/picks.js")
+def serve_picks_js():
+    if PICKS_JS_FILE.exists():
+        return FileResponse(str(PICKS_JS_FILE), media_type="application/javascript")
+    raise HTTPException(status_code=404)
+
+
+@app.get("/", response_class=HTMLResponse)
 def serve_frontend():
-    if FRONTEND_FILE.exists():
-        return FileResponse(str(FRONTEND_FILE), media_type="text/html")
-    raise HTTPException(status_code=404, detail="shopgoodwill_feed.html not found")
+    if not FRONTEND_FILE.exists():
+        raise HTTPException(status_code=404, detail="shopgoodwill_feed.html not found")
+    html = FRONTEND_FILE.read_text()
+    if PICKS_JS_FILE.exists() and "/picks.js" not in html:
+        html = html.replace("</body>", _FRAME_INJECTION + "</body>", 1)
+    return HTMLResponse(html, media_type="text/html")
 
 
 @app.get("/manifest.webmanifest")
