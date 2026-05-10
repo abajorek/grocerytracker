@@ -31,6 +31,7 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -56,6 +57,7 @@ DATA_DIR = ROOT / "data"
 DATA_DIR.mkdir(exist_ok=True)
 FAVORITES_FILE = DATA_DIR / "favorites.json"
 BRANDS_FILE = DATA_DIR / "brands.json"
+PICKS_FILE = DATA_DIR / "picks.json"
 FRONTEND_FILE = ROOT / "shopgoodwill_feed.html"
 MANIFEST_FILE = ROOT / "manifest.webmanifest"
 ICON_FILE = ROOT / "icon.svg"
@@ -69,6 +71,64 @@ DEFAULT_BRANDS = [
     "J.Crew",
     "Eileen Fisher",
     "Lululemon",
+]
+
+# Andy's saved-search seed (parsed from the Grailed export). Editable later
+# via /api/picks; this is just the cold-start fallback.
+DEFAULT_PICKS: List[Dict[str, Any]] = [
+    {"name": "Merz Navy Henley", "query": "merz henley", "price_max": 70, "size_hints": ["XL", "X-Large"]},
+    {"name": "Brycelands", "query": "brycelands", "size_hints": ["36", "38"]},
+    {"name": "No Ordinary Joe", "query": "no ordinary joe", "size_hints": ["XL", "X-Large", "44", "45", "46"]},
+    {"name": "Private White VC", "query": "private white", "size_hints": ["XL", "X-Large", "36", "37", "38"]},
+    {"name": "Páramo", "query": "paramo", "size_hints": ["XL", "X-Large"]},
+    {"name": "Mackintosh", "query": "mackintosh", "price_max": 200, "size_hints": ["L", "XL", "Large", "X-Large"]},
+    {"name": "John Smedley", "query": "john smedley", "price_max": 100, "size_hints": ["L", "XL", "Large", "X-Large"]},
+    {"name": "Montane Minimus", "query": "montane minimus", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Arc'teryx Squamish", "query": "arcteryx squamish", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Rab Demand", "query": "rab demand", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Roeckl Gloves", "query": "roeckl", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Devold Expedition", "query": "devold expedition", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Rab Microlight", "query": "rab microlight", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Rab Neutrino", "query": "rab neutrino", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Montbell Down", "query": "montbell down", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Montbell Mirage", "query": "montbell mirage", "price_max": 100, "size_hints": ["XL", "X-Large"]},
+    {"name": "Nanga Aurora", "query": "nanga aurora"},
+    {"name": "Outlier", "query": "outlier", "size_hints": ["12"]},
+    {"name": "Western Rise", "query": "western rise", "size_hints": ["12"]},
+    {"name": "Dale of Norway", "query": "dale of norway", "size_hints": ["12"]},
+    {"name": "Devold", "query": "devold", "size_hints": ["12"]},
+    {"name": "Amundsen", "query": "amundsen", "size_hints": ["12"]},
+    {"name": "Meindl", "query": "meindl", "size_hints": ["12"]},
+    {"name": "Hanwag", "query": "hanwag", "size_hints": ["12"]},
+    {"name": "Berghaus", "query": "berghaus", "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "Rab", "query": "rab", "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "Montane", "query": "montane", "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "Veilance", "query": "veilance", "price_max": 100, "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "66° North", "query": "66 degrees north", "price_max": 50, "size_hints": ["L", "XL", "Large", "X-Large"]},
+    {"name": "C.P. Company", "query": "cp company", "price_max": 50, "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "Fjällräven Vidda Pro", "query": "fjallraven vidda", "price_max": 70, "size_hints": ["36", "38"]},
+    {"name": "Fjällräven Keb Trousers", "query": "fjallraven keb", "price_max": 80, "size_hints": ["36", "37", "38"]},
+    {"name": "Icebreaker Waypoint", "query": "icebreaker waypoint", "size_hints": ["L", "XL", "Large", "X-Large"]},
+    {"name": "Orvis Moleskin", "query": "orvis moleskin", "price_max": 1000, "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "Orvis Chamois", "query": "orvis chamois", "price_max": 1000, "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "SealSkinz", "query": "sealskinz"},
+    {"name": "Prana Stretch Zion Zip", "query": "stretch zion zip", "size_hints": ["L", "Large", "36", "37"]},
+    {"name": "Prana Stretch Zion Convertible", "query": "stretch zion convertible", "size_hints": ["36", "37"]},
+    {"name": "Patagonia Quandary", "query": "patagonia quandary", "size_hints": ["36", "38"]},
+    {"name": "Lundhags", "query": "lundhags", "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "Faherty Legend", "query": "faherty legend", "price_max": 50, "size_hints": ["XL", "X-Large"]},
+    {"name": "Klättermusen", "query": "klattermusen", "price_max": 50, "size_hints": ["L", "XL", "Large", "X-Large", "36", "37", "38"]},
+    {"name": "Fjällräven", "query": "fjallraven", "size_hints": ["54", "55", "56", "57"]},
+    {"name": "Melanzana", "query": "melanzana", "price_max": 50, "size_hints": ["L", "XL", "Large", "X-Large"]},
+    {"name": "Himali", "query": "himali", "price_max": 50, "size_hints": ["L", "XL", "Large", "X-Large", "12"]},
+    {"name": "Barbour Jacket", "query": "barbour", "price_max": 50, "size_hints": ["XL", "X-Large"]},
+    {"name": "Ted Baker", "query": "ted baker", "size_hints": ["46"]},
+    {"name": "Profumo", "query": "profumo", "price_max": 50, "size_hints": ["L", "XL", "Large", "X-Large", "36", "37"]},
+    {"name": "Fat Face", "query": "fat face", "price_max": 50, "size_hints": ["XL", "X-Large"]},
+    {"name": "Hoka Anacapa 2 Low GTX", "query": "hoka anacapa", "price_max": 50, "size_hints": ["12"]},
+    {"name": "Fjällräven Övik", "query": "fjallraven ovik", "price_max": 50, "size_hints": ["XL", "X-Large"]},
+    {"name": "Norrøna", "query": "norrona", "price_max": 50, "size_hints": ["36", "37", "38", "12"]},
+    {"name": "Samsøe", "query": "samsoe", "price_max": 50, "size_hints": ["36", "37", "38", "12"]},
 ]
 
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
@@ -85,6 +145,9 @@ SORT_OPTIONS: Dict[str, tuple] = {
     "price_high":   ("3", "true"),
     "most_bids":    ("2", "true"),
 }
+
+_PICKS_CACHE: Dict[str, Dict[str, Any]] = {}
+_PICKS_TTL = 300  # 5 min per-pick
 
 
 class FeedItem(BaseModel):
@@ -485,7 +548,7 @@ def _strip_html(value: str) -> str:
     text = _BLOCK_TAGS_RE.sub("\n", value)
     text = _TAGS_RE.sub(" ", text)
     text = html_module.unescape(text)
-    text = text.replace(" ", " ").replace("\xa0", " ")
+    text = text.replace(" ", " ").replace("\xa0", " ")
     text = re.sub(r"[ \t]+", " ", text)
     return text
 
@@ -495,7 +558,7 @@ def _extract_notes(html_description: str) -> List[str]:
     out: List[str] = []
     seen = set()
     for raw_line in re.split(r'[\n\r]+', text):
-        line = raw_line.strip(" \t-•* ")
+        line = raw_line.strip(" \t-•* ")
         if not line or len(line) > 140:
             continue
         m = _NOTE_LINE_RE.match(line)
@@ -807,6 +870,126 @@ def store_remove_favorite(item_id: int) -> list:
     return remaining
 
 
+# ---------- Andy's Picks (saved-search fan-out) ----------
+
+_SIZE_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9\-/]*")
+
+
+def _match_size_hints(title: str, hints: List[str]) -> bool:
+    """Return True if the listing title contains any of the size hints
+    as a standalone token. Avoids 'L' matching inside 'wool'."""
+    if not hints:
+        return True
+    title_lower = (title or "").lower()
+    if not title_lower:
+        return False
+    tokens = set(_SIZE_TOKEN_RE.findall(title_lower))
+    for h in hints:
+        h_low = str(h or "").lower().strip()
+        if not h_low:
+            continue
+        if h_low in tokens:
+            return True
+    return False
+
+
+def store_get_picks() -> List[dict]:
+    if _supabase_enabled():
+        rows = _supabase(
+            "GET", "thrift_settings",
+            params={"key": "eq.picks", "select": "value"},
+        )
+        if rows and rows[0].get("value"):
+            value = rows[0]["value"]
+            if isinstance(value, list):
+                return value
+    if PICKS_FILE.exists():
+        cached = _read_json(PICKS_FILE, None)
+        if isinstance(cached, list):
+            return cached
+    return list(DEFAULT_PICKS)
+
+
+def store_set_picks(picks: List[dict]) -> List[dict]:
+    cleaned: List[dict] = []
+    for p in picks or []:
+        if not isinstance(p, dict):
+            continue
+        q = (p.get("query") or "").strip()
+        if not q:
+            continue
+        entry: Dict[str, Any] = {
+            "name": (p.get("name") or q).strip(),
+            "query": q,
+        }
+        pm = p.get("price_max")
+        try:
+            pm = float(pm) if pm is not None else 0
+        except (ValueError, TypeError):
+            pm = 0
+        if pm > 0:
+            entry["price_max"] = pm
+        hints = p.get("size_hints") or []
+        if isinstance(hints, list):
+            entry["size_hints"] = [str(h).strip() for h in hints if str(h).strip()]
+        cleaned.append(entry)
+
+    if _supabase_enabled():
+        _supabase(
+            "POST", "thrift_settings",
+            body={"key": "picks", "value": cleaned},
+            prefer="return=minimal,resolution=merge-duplicates",
+        )
+    else:
+        _write_json(PICKS_FILE, cleaned)
+    return cleaned
+
+
+def _search_one_pick(pick: dict) -> List[FeedItem]:
+    cache_key = json.dumps(pick, sort_keys=True)
+    cached = _PICKS_CACHE.get(cache_key)
+    if cached and time.time() - cached["t"] < _PICKS_TTL:
+        return cached["v"]
+
+    label = (pick.get("name") or pick.get("query") or "Pick").strip()
+    query = (pick.get("query") or "").strip()
+    if not query:
+        _PICKS_CACHE[cache_key] = {"v": [], "t": time.time()}
+        return []
+
+    try:
+        raw_items = _search_shopgoodwill(
+            query,
+            page=1,
+            page_size=24,
+            price_max=float(pick.get("price_max") or 0),
+            no_pickup=True,
+        )
+    except HTTPException:
+        return []
+    except Exception:
+        return []
+
+    hints = pick.get("size_hints") or []
+    items: List[FeedItem] = []
+    for raw in raw_items:
+        try:
+            normalized = _normalize_item(raw, label)
+        except Exception:
+            continue
+        if normalized is None:
+            continue
+        if hints and not _match_size_hints(normalized.title, hints):
+            continue
+        items.append(normalized)
+
+    _PICKS_CACHE[cache_key] = {"v": items, "t": time.time()}
+    if len(_PICKS_CACHE) > 200:
+        for k in list(_PICKS_CACHE.keys())[:50]:
+            _PICKS_CACHE.pop(k, None)
+    return items
+
+
 # ---------- routes ----------
 
 @app.get("/api/feed", response_model=List[FeedItem])
@@ -936,6 +1119,56 @@ def set_brands(brands: List[str]):
     return store_set_brands(brands)
 
 
+@app.get("/api/picks")
+def list_picks():
+    """List Andy's saved searches."""
+    return store_get_picks()
+
+
+@app.post("/api/picks")
+def save_picks(picks: List[Dict[str, Any]]):
+    """Replace the saved-search list."""
+    return store_set_picks(picks)
+
+
+@app.get("/api/picks/feed", response_model=List[FeedItem])
+def picks_feed(
+    page: int = Query(1, ge=1),
+    picks_per_page: int = Query(12, ge=1, le=24),
+):
+    """Run a chunk of Andy's saved searches in parallel and return the
+    combined results sorted by ending soonest. Pagination chunks the
+    saved-search list (not items) so the first page returns quickly."""
+    picks = store_get_picks()
+    if not picks:
+        return []
+    start = (page - 1) * picks_per_page
+    end = start + picks_per_page
+    chunk = picks[start:end]
+    if not chunk:
+        return []
+
+    all_items: List[FeedItem] = []
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for batch in pool.map(_search_one_pick, chunk):
+            all_items.extend(batch)
+
+    seen: set = set()
+    deduped: List[FeedItem] = []
+    for it in sorted(
+        all_items,
+        key=lambda x: (
+            1 if x.is_closed else 0,
+            x.seconds_left if x.seconds_left > 0 else 10**9,
+        ),
+    ):
+        if it.id in seen:
+            continue
+        seen.add(it.id)
+        deduped.append(it)
+    return deduped
+
+
 @app.get("/api/favorites")
 def list_favorites():
     return store_list_favorites()
@@ -959,6 +1192,7 @@ def health():
         "bidding": bool(os.environ.get("SHOPGOODWILL_TOKEN")),
         "retail_lookup": bool(ANTHROPIC_API_KEY),
         "retail_model": ANTHROPIC_MODEL if ANTHROPIC_API_KEY else None,
+        "picks": len(store_get_picks()),
     }
 
 
