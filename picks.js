@@ -7,6 +7,12 @@
 // monkey-patches renderBrandBar / loadMore.
 
 (function () {
+  // Picks paging contract: backend serves page=N&picks_per_page=12.
+  // We don't know total picks at runtime, so cap probing at MAX_PICK_PAGES.
+  // Bump this if DEFAULT_PICKS grows past 12*MAX_PICK_PAGES.
+  const PICKS_PER_PAGE = 12;
+  const MAX_PICK_PAGES = 6;  // 6 × 12 = 72 picks of headroom
+
   const css = `
     .chip.picks {
       background: transparent;
@@ -21,6 +27,16 @@
       border-color: var(--olive-deep);
       border-style: solid;
     }
+    .chip.picks .picks-count {
+      background: rgba(255,255,255,0.25);
+      color: inherit;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .chip.picks:not(.active) .picks-count { display: none; }
   `;
   const styleEl = document.createElement('style');
   styleEl.textContent = css;
@@ -33,7 +49,8 @@
     const s = window.state;
     const picks = document.createElement('button');
     picks.className = 'chip picks' + (s && s.mode === 'picks' ? ' active' : '');
-    picks.innerHTML = "★ Andy's";
+    const count = s && s.mode === 'picks' && s.items ? s.items.length : 0;
+    picks.innerHTML = "★ Andy's<span class=\"picks-count\">" + count + "</span>";
     picks.setAttribute('aria-label', "Andy's Picks");
     picks.onclick = window.showPicks;
     bar.appendChild(picks);
@@ -70,7 +87,7 @@
             <div class="card">
               <div class="center-msg">
                 <div><h3>No picks today</h3>
-                <p>None of Andy's saved searches turned up anything on ShopGoodwill that matches the size hints.</p></div>
+                <p>All ${MAX_PICK_PAGES * PICKS_PER_PAGE}+ saved searches came back empty after price + size filters. Try opening individual brand chips, or relax filters by editing DEFAULT_PICKS.</p></div>
               </div>
             </div>`;
           return;
@@ -83,17 +100,29 @@
     window.renderBrandBar();
   }
 
+  // Walks pick-pages until it finds one with items, or runs out of
+  // saved-search batches. Empty pages are common (a 12-pick batch may
+  // legitimately have zero ShopGoodwill matches after price + size
+  // filters), so we auto-skip rather than treating empty as terminal.
   async function picksLoadMore() {
     const s = window.state;
     if (s.loading || s.exhausted) return;
     s.loading = true;
     try {
-      const items = await window.apiGet(
-        `/api/picks/feed?page=${s.page}&picks_per_page=12`
-      );
-      if (!items.length) s.exhausted = true;
-      s.items.push(...items);
-      s.page += 1;
+      while (s.page <= MAX_PICK_PAGES && !s.exhausted) {
+        const items = await window.apiGet(
+          `/api/picks/feed?page=${s.page}&picks_per_page=${PICKS_PER_PAGE}`
+        );
+        const got = (Array.isArray(items) && items.length) ? items : [];
+        s.page += 1;
+        if (s.page > MAX_PICK_PAGES) s.exhausted = true;
+        if (got.length > 0) {
+          s.items.push(...got);
+          window.renderFeed();
+          return;  // surface what we have, let scroll trigger the next batch
+        }
+      }
+      // Exhausted without finding anything new — re-render to trigger empty state if applicable.
       window.renderFeed();
     } catch (e) {
       window.renderError(e);
@@ -116,7 +145,7 @@
         <div class="center-msg">
           <div>
             <h3>Andy's Picks</h3>
-            <p>Running 50+ saved searches across ShopGoodwill in parallel. First batch is loading — flick up for more as they come in.</p>
+            <p>Running 50+ saved searches across ShopGoodwill in parallel. First batch is loading — flick up as more come in.</p>
             <div class="dots"><span></span><span></span><span></span></div>
           </div>
         </div>
