@@ -21,6 +21,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -64,8 +65,6 @@ DEFAULT_BRANDS = [
     "Lululemon",
 ]
 
-# Andy's saved-search seed (parsed from the Grailed export). Editable later
-# via /api/picks; this is just the cold-start fallback.
 DEFAULT_PICKS: List[Dict[str, Any]] = [
     {"name": "Merz Navy Henley", "query": "merz henley", "price_max": 70, "size_hints": ["XL", "X-Large"]},
     {"name": "Brycelands", "query": "brycelands", "size_hints": ["36", "38"]},
@@ -137,15 +136,12 @@ SORT_OPTIONS: Dict[str, tuple] = {
 }
 
 _PICKS_CACHE: Dict[str, Dict[str, Any]] = {}
-_PICKS_TTL = 300  # 5 min per-pick
+_PICKS_TTL = 300
 
-# Injected before </body> on the served HTML so picks.js can monkey-patch
-# the inline app. The shim exposes `state` on window because the inline
-# app declares it with `const`, which would otherwise be script-scoped.
 _FRAME_INJECTION = (
     "<script>(function(){try{window.state=state;"
     "window.apiGet=apiGet;window.renderError=renderError;}catch(e){}})()</script>"
-    "<script src=\"/picks.js?v=2\"></script>"
+    "<script src=\"/picks.js?v=3\"></script>"
 )
 
 
@@ -231,10 +227,7 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
     if not item_id:
         return None
     image_path = (
-        raw.get("imageURL")
-        or raw.get("imageUrlString")
-        or raw.get("image")
-        or ""
+        raw.get("imageURL") or raw.get("imageUrlString") or raw.get("image") or ""
     )
     if isinstance(image_path, str) and ";" in image_path:
         image_path = image_path.split(";", 1)[0]
@@ -286,60 +279,36 @@ DEFAULT_HEADERS = {
 }
 
 
-def _build_search_payload(
-    *,
-    query: str,
-    page: int,
-    page_size: int,
-    sort: str = "ending_soon",
-    price_min: float = 0,
-    price_max: float = 0,
-    buy_now_only: bool = False,
-    no_pickup: bool = False,
-    include_closed: bool = False,
-    closed_days_back: int = 7,
-) -> dict:
+def _build_search_payload(*, query, page, page_size, sort="ending_soon",
+                          price_min=0, price_max=0, buy_now_only=False,
+                          no_pickup=False, include_closed=False, closed_days_back=7):
     sort_col, sort_desc = SORT_OPTIONS.get(sort, SORT_OPTIONS["ending_soon"])
     high = price_max if price_max and price_max > 0 else 999999
     low = price_min if price_min and price_min >= 0 else 0
     return {
-        "isSize": False,
-        "isWeddingCatagory": "false",
-        "isMultipleCategoryIds": False,
-        "isFromHeaderMenuTab": False,
-        "layout": "",
-        "searchText": (query or "").replace('"', ""),
-        "selectedGroup": "",
-        "selectedCategoryIds": "",
-        "selectedSellerIds": "",
-        "lowPrice": str(low),
-        "highPrice": str(high),
+        "isSize": False, "isWeddingCatagory": "false",
+        "isMultipleCategoryIds": False, "isFromHeaderMenuTab": False,
+        "layout": "", "searchText": (query or "").replace('"', ""),
+        "selectedGroup": "", "selectedCategoryIds": "", "selectedSellerIds": "",
+        "lowPrice": str(low), "highPrice": str(high),
         "searchBuyNowOnly": "true" if buy_now_only else "",
         "searchPickupOnly": "false",
         "searchNoPickupOnly": "true" if no_pickup else "false",
-        "searchOneCentShippingOnly": "false",
-        "searchDescriptions": "false",
+        "searchOneCentShippingOnly": "false", "searchDescriptions": "false",
         "searchClosedAuctions": "true" if include_closed else "false",
         "closedAuctionEndingDate": "1/1/0001",
         "closedAuctionDaysBack": str(int(closed_days_back) if include_closed else 7),
-        "searchCanadaShipping": "false",
-        "searchInternationalShippingOnly": "false",
-        "sortColumn": sort_col,
-        "sortDescending": sort_desc,
-        "savedSearchId": 0,
-        "useBuyerPrefs": "true",
+        "searchCanadaShipping": "false", "searchInternationalShippingOnly": "false",
+        "sortColumn": sort_col, "sortDescending": sort_desc,
+        "savedSearchId": 0, "useBuyerPrefs": "true",
         "searchUSOnlyShipping": "false",
-        "categoryLevelNo": "1",
-        "categoryLevel": 1,
-        "categoryId": 0,
-        "partNumber": "",
-        "catIds": "",
-        "page": int(page),
-        "pageSize": int(page_size),
+        "categoryLevelNo": "1", "categoryLevel": 1, "categoryId": 0,
+        "partNumber": "", "catIds": "",
+        "page": int(page), "pageSize": int(page_size),
     }
 
 
-def _shopgoodwill_request(*, query: str, page: int, page_size: int, **filters: Any) -> requests.Response:
+def _shopgoodwill_request(*, query, page, page_size, **filters):
     headers = dict(DEFAULT_HEADERS)
     token = os.environ.get("SHOPGOODWILL_TOKEN")
     if token:
@@ -351,22 +320,19 @@ def _shopgoodwill_request(*, query: str, page: int, page_size: int, **filters: A
     )
 
 
-def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40, **filters: Any) -> List[dict]:
+def _search_shopgoodwill(query, page=1, page_size=40, **filters):
     try:
         resp = _shopgoodwill_request(query=query, page=page, page_size=page_size, **filters)
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
-
     if not resp.ok:
         body = (resp.text or "")[:240].replace("\n", " ")
         raise HTTPException(status_code=502, detail=f"ShopGoodwill returned {resp.status_code}: {body}")
-
     try:
         data = resp.json()
     except ValueError:
         snippet = (resp.text or "")[:240].replace("\n", " ")
         raise HTTPException(status_code=502, detail=f"ShopGoodwill returned non-JSON ({resp.status_code}): {snippet}")
-
     if isinstance(data, dict):
         if "searchResults" in data and isinstance(data["searchResults"], dict):
             return data["searchResults"].get("items", []) or []
@@ -374,38 +340,26 @@ def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40, **filte
     return []
 
 
-def _place_bid(item_id: int, amount: float, quantity: int = 1) -> dict:
+def _place_bid(item_id, amount, quantity=1):
     token = os.environ.get("SHOPGOODWILL_TOKEN")
     if not token:
-        raise HTTPException(
-            status_code=401,
-            detail=(
-                "SHOPGOODWILL_TOKEN is not set on the server. Add your ShopGoodwill "
-                "JWT in Render → Environment to enable bidding."
-            ),
-        )
+        raise HTTPException(status_code=401, detail=(
+            "SHOPGOODWILL_TOKEN is not set on the server. Add your ShopGoodwill "
+            "JWT in Render → Environment to enable bidding."
+        ))
     headers = dict(DEFAULT_HEADERS)
     headers["Authorization"] = f"Bearer {token}"
-    payload = {
-        "itemId": int(item_id),
-        "bidAmount": f"{float(amount):.2f}",
-        "quantity": int(quantity),
-    }
+    payload = {"itemId": int(item_id), "bidAmount": f"{float(amount):.2f}", "quantity": int(quantity)}
     try:
-        resp = requests.post(
-            f"{SHOPGOODWILL_BASE}/ItemBid/PlaceBid",
-            json=payload, headers=headers, timeout=20,
-        )
+        resp = requests.post(f"{SHOPGOODWILL_BASE}/ItemBid/PlaceBid",
+                             json=payload, headers=headers, timeout=20)
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
     if resp.status_code in (401, 403):
-        raise HTTPException(
-            status_code=401,
-            detail=(
-                "ShopGoodwill rejected the token (it may be expired). Log in again "
-                "and update SHOPGOODWILL_TOKEN in Render → Environment."
-            ),
-        )
+        raise HTTPException(status_code=401, detail=(
+            "ShopGoodwill rejected the token (it may be expired). Log in again "
+            "and update SHOPGOODWILL_TOKEN in Render → Environment."
+        ))
     if not resp.ok:
         body = (resp.text or "")[:300].replace("\n", " ")
         raise HTTPException(status_code=502, detail=f"ShopGoodwill returned {resp.status_code}: {body}")
@@ -417,8 +371,7 @@ def _place_bid(item_id: int, amount: float, quantity: int = 1) -> dict:
 
 _IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".gif")
 _IMAGE_LIST_KEYS = (
-    "imageUrlString", "imageURLString",
-    "imageURLs", "imageUrls",
+    "imageUrlString", "imageURLString", "imageURLs", "imageUrls",
     "images", "itemImages", "additionalImages", "imageList", "galleryImages",
     "itemImageUrls", "itemImageURLs",
 )
@@ -428,32 +381,29 @@ _IMAGE_SCALAR_KEYS = (
 )
 
 
-def _looks_like_image_path(value: str) -> bool:
+def _looks_like_image_path(value):
     if not isinstance(value, str) or not value:
         return False
     lower = value.lower().split("?", 1)[0]
     return lower.endswith(_IMAGE_SUFFIXES)
 
 
-def _split_image_string(value: str) -> List[str]:
+def _split_image_string(value):
     if not value:
         return []
     pieces = value.replace(",", ";").split(";")
     return [p for p in (s.strip() for s in pieces) if p]
 
 
-def _extract_gallery(detail: Any, image_server_default: str = "") -> List[str]:
+def _extract_gallery(detail, image_server_default=""):
     if not isinstance(detail, dict):
         return []
     image_server = (
-        detail.get("imageServer")
-        or detail.get("imageServerLocation")
-        or image_server_default
-        or FALLBACK_IMAGE_BASE
+        detail.get("imageServer") or detail.get("imageServerLocation")
+        or image_server_default or FALLBACK_IMAGE_BASE
     )
-    seen: set = set()
-    out: List[str] = []
-    def push(raw: Any):
+    seen, out = set(), []
+    def push(raw):
         if not isinstance(raw, str):
             return
         url = raw.strip()
@@ -507,7 +457,7 @@ _NOTE_BLOCKLIST = re.compile(
 _NOTE_LINE_RE = re.compile(r'^([^:]{2,30}?)\s*:\s*(.+)$')
 
 
-def _strip_html(value: str) -> str:
+def _strip_html(value):
     if not value:
         return ""
     text = _BLOCK_TAGS_RE.sub("\n", value)
@@ -518,10 +468,9 @@ def _strip_html(value: str) -> str:
     return text
 
 
-def _extract_notes(html_description: str) -> List[str]:
+def _extract_notes(html_description):
     text = _strip_html(html_description)
-    out: List[str] = []
-    seen = set()
+    out, seen = [], set()
     for raw_line in re.split(r'[\n\r]+', text):
         line = raw_line.strip(" \t-•* ")
         if not line or len(line) > 140:
@@ -548,7 +497,7 @@ _DETAIL_CACHE: Dict[int, Dict[str, Any]] = {}
 _DETAIL_TTL = 1800
 
 
-def _fetch_item_detail(item_id: int) -> dict:
+def _fetch_item_detail(item_id):
     cached = _DETAIL_CACHE.get(item_id)
     if cached and time.time() - cached["t"] < _DETAIL_TTL:
         return cached["v"]
@@ -602,7 +551,7 @@ _RETAIL_PROMPT = (
 )
 
 
-def _parse_retail_json(text: str) -> Optional[dict]:
+def _parse_retail_json(text):
     if not text:
         return None
     text = text.strip()
@@ -637,7 +586,7 @@ def _parse_retail_json(text: str) -> Optional[dict]:
     return out
 
 
-def _retail_estimate(item_id: int, title: str, brand: str, image_url: str) -> dict:
+def _retail_estimate(item_id, title, brand, image_url):
     if not ANTHROPIC_API_KEY:
         return {"ok": False, "reason": "ANTHROPIC_API_KEY is not set on the server. Add it in Render → Environment to enable retail-price lookup."}
     cached = _RETAIL_CACHE.get(item_id)
@@ -693,11 +642,11 @@ def _retail_estimate(item_id: int, title: str, brand: str, image_url: str) -> di
     return result
 
 
-def _supabase_enabled() -> bool:
+def _supabase_enabled():
     return bool(SUPABASE_URL and SUPABASE_KEY)
 
 
-def _supabase(method: str, path: str, *, body=None, params=None, prefer: Optional[str] = None):
+def _supabase(method, path, *, body=None, params=None, prefer=None):
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -707,10 +656,8 @@ def _supabase(method: str, path: str, *, body=None, params=None, prefer: Optiona
     if prefer:
         headers["Prefer"] = prefer
     try:
-        resp = requests.request(
-            method, f"{SUPABASE_URL}/rest/v1/{path}",
-            headers=headers, params=params, json=body, timeout=15,
-        )
+        resp = requests.request(method, f"{SUPABASE_URL}/rest/v1/{path}",
+                                headers=headers, params=params, json=body, timeout=15)
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"Supabase network error: {exc}")
     if not resp.ok:
@@ -723,7 +670,7 @@ def _supabase(method: str, path: str, *, body=None, params=None, prefer: Optiona
         return []
 
 
-def store_get_brands() -> List[str]:
+def store_get_brands():
     if _supabase_enabled():
         rows = _supabase("GET", "thrift_settings", params={"key": "eq.brands", "select": "value"})
         if rows and rows[0].get("value"):
@@ -734,7 +681,7 @@ def store_get_brands() -> List[str]:
     return _read_json(BRANDS_FILE, list(DEFAULT_BRANDS))
 
 
-def store_set_brands(brands: List[str]) -> List[str]:
+def store_set_brands(brands):
     cleaned = [b.strip() for b in brands if b and b.strip()]
     if _supabase_enabled():
         _supabase("POST", "thrift_settings",
@@ -745,20 +692,18 @@ def store_set_brands(brands: List[str]) -> List[str]:
     return cleaned
 
 
-def store_list_favorites() -> list:
+def store_list_favorites():
     if _supabase_enabled():
-        return _supabase("GET", "thrift_favorites", params={"select": "*", "order": "saved_at.desc"})
+        return _supabase("GET", "thrift_favorites",
+                         params={"select": "*", "order": "saved_at.desc"})
     return _read_json(FAVORITES_FILE, [])
 
 
-def store_add_favorite(fav: Favorite) -> list:
+def store_add_favorite(fav):
     payload = {
-        "item_id": fav.item_id,
-        "title": fav.title,
-        "image_url": fav.image_url,
-        "listing_url": fav.listing_url,
-        "brand": fav.brand or "",
-        "saved_at": fav.saved_at,
+        "item_id": fav.item_id, "title": fav.title,
+        "image_url": fav.image_url, "listing_url": fav.listing_url,
+        "brand": fav.brand or "", "saved_at": fav.saved_at,
     }
     if _supabase_enabled():
         _supabase("POST", "thrift_favorites", body=payload,
@@ -771,7 +716,7 @@ def store_add_favorite(fav: Favorite) -> list:
     return favs
 
 
-def store_remove_favorite(item_id: int) -> list:
+def store_remove_favorite(item_id):
     if _supabase_enabled():
         _supabase("DELETE", "thrift_favorites", params={"item_id": f"eq.{item_id}"})
         return store_list_favorites()
@@ -781,23 +726,71 @@ def store_remove_favorite(item_id: int) -> list:
     return remaining
 
 
+# ---------- picks-specific filtering ----------
+
 _SIZE_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9\-/]*")
+_WORD_TOKEN_RE = re.compile(r"[a-z]{2,}")
+# Words from a pick's `query` that aren't useful for brand-prefix matching
+# (they're descriptive, not brand-identifying).
+_QUERY_STOPWORDS = {
+    "the", "and", "for", "men", "mens", "women", "womens", "with",
+    "size", "sized", "small", "medium", "large",
+    "jacket", "coat", "shirt", "pants", "trousers", "sweater",
+    "henley", "down", "vest", "shorts", "bag", "gloves", "boots", "shoes",
+    "company", "vc", "co",
+}
+
+
+def _strip_diacritics(s: str) -> str:
+    if not s:
+        return ""
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
 
 def _match_size_hints(title: str, hints: List[str]) -> bool:
     if not hints:
         return True
-    title_lower = (title or "").lower()
+    title_lower = _strip_diacritics(title or "").lower()
     if not title_lower:
         return False
     tokens = set(_SIZE_TOKEN_RE.findall(title_lower))
     for h in hints:
-        h_low = str(h or "").lower().strip()
+        h_low = _strip_diacritics(str(h or "")).lower().strip()
         if not h_low:
             continue
         if h_low in tokens:
             return True
     return False
+
+
+def _pick_query_matches_title(query: str, title: str) -> bool:
+    """Filter substring/marketing false positives.
+
+    Two checks (both must pass):
+      1) Every 3+-char word from the pick's query must appear as a
+         standalone alpha token in the title. Kills "rab" matching
+         inside "Grab bag".
+      2) The first non-stopword 3+-char query word (the "brand word")
+         must appear in the first 6 alpha tokens of the title. Kills
+         "Marmot Men's Size XL Grey Heather Montane Crewneck" matching
+         the "montane" pick — Marmot uses "Montane" as a fabric name,
+         and real Montane listings put the brand at the front.
+    """
+    if not query:
+        return True
+    title_norm = _strip_diacritics(title or "").lower()
+    query_norm = _strip_diacritics(query).lower()
+    title_tokens_all = _WORD_TOKEN_RE.findall(title_norm)
+    title_token_set = set(title_tokens_all)
+    query_words = [w for w in _WORD_TOKEN_RE.findall(query_norm) if len(w) >= 3]
+    if not query_words:
+        return True
+    # All 3+-char query words must appear somewhere as a token.
+    if not all(w in title_token_set for w in query_words):
+        return False
+    # Brand-prefix: first non-stopword query word must appear in the first 6 tokens.
+    brand_word = next((w for w in query_words if w not in _QUERY_STOPWORDS), query_words[0])
+    return brand_word in title_tokens_all[:6]
 
 
 def store_get_picks() -> List[dict]:
@@ -874,6 +867,8 @@ def _search_one_pick(pick: dict) -> List[FeedItem]:
         except Exception:
             continue
         if normalized is None:
+            continue
+        if not _pick_query_matches_title(query, normalized.title):
             continue
         if hints and not _match_size_hints(normalized.title, hints):
             continue
@@ -1003,10 +998,7 @@ def save_picks(picks: List[Dict[str, Any]]):
 
 
 @app.get("/api/picks/feed", response_model=List[FeedItem])
-def picks_feed(
-    page: int = Query(1, ge=1),
-    picks_per_page: int = Query(12, ge=1, le=24),
-):
+def picks_feed(page: int = Query(1, ge=1), picks_per_page: int = Query(12, ge=1, le=24)):
     picks = store_get_picks()
     if not picks:
         return []
@@ -1019,14 +1011,11 @@ def picks_feed(
     with ThreadPoolExecutor(max_workers=4) as pool:
         for batch in pool.map(_search_one_pick, chunk):
             all_items.extend(batch)
-    seen: set = set()
-    deduped: List[FeedItem] = []
+    seen, deduped = set(), []
     for it in sorted(
         all_items,
-        key=lambda x: (
-            1 if x.is_closed else 0,
-            x.seconds_left if x.seconds_left > 0 else 10**9,
-        ),
+        key=lambda x: (1 if x.is_closed else 0,
+                       x.seconds_left if x.seconds_left > 0 else 10**9),
     ):
         if it.id in seen:
             continue
