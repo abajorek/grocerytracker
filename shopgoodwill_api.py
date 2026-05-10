@@ -77,6 +77,15 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or ""
 ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip()
 
+# (sortColumn, sortDescending) tuples that match ShopGoodwill's web UI.
+SORT_OPTIONS: Dict[str, tuple] = {
+    "ending_soon":  ("1", "false"),
+    "newly_listed": ("4", "true"),
+    "price_low":    ("3", "false"),
+    "price_high":   ("3", "true"),
+    "most_bids":    ("2", "true"),
+}
+
 
 class FeedItem(BaseModel):
     id: int
@@ -91,6 +100,7 @@ class FeedItem(BaseModel):
     listing_url: str
     brand: str
     location: Optional[str] = None
+    is_closed: bool = False
 
 
 class Favorite(BaseModel):
@@ -172,19 +182,31 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
     if not image_url:
         return None
     end_time = raw.get("endTime") or raw.get("endDate") or ""
+    seconds = _seconds_until(end_time)
+    final_price = raw.get("finalPrice") or raw.get("closingPrice")
+    is_closed = bool(
+        raw.get("isClosed")
+        or raw.get("closed")
+        or final_price is not None
+        or (end_time and seconds == 0)
+    )
+    current = raw.get("currentPrice")
+    if current is None and final_price is not None:
+        current = final_price
     return FeedItem(
         id=int(item_id),
         title=str(raw.get("title", "") or "").strip(),
         image_url=image_url,
         images=[image_url],
-        current_price=float(raw.get("currentPrice", 0) or 0),
+        current_price=float(current or 0),
         minimum_bid=float(raw.get("minimumBid", 0) or 0),
         bid_count=int(raw.get("bidCount", 0) or 0),
         end_time=end_time,
-        seconds_left=_seconds_until(end_time),
+        seconds_left=seconds,
         listing_url=f"https://shopgoodwill.com/item/{item_id}",
         brand=brand_query,
         location=raw.get("sellerName") or raw.get("location"),
+        is_closed=is_closed,
     )
 
 
@@ -204,31 +226,46 @@ DEFAULT_HEADERS = {
 }
 
 
-def _shopgoodwill_payload(query: str, page: int, page_size: int) -> dict:
+def _build_search_payload(
+    *,
+    query: str,
+    page: int,
+    page_size: int,
+    sort: str = "ending_soon",
+    price_min: float = 0,
+    price_max: float = 0,
+    buy_now_only: bool = False,
+    no_pickup: bool = False,
+    include_closed: bool = False,
+    closed_days_back: int = 7,
+) -> dict:
+    sort_col, sort_desc = SORT_OPTIONS.get(sort, SORT_OPTIONS["ending_soon"])
+    high = price_max if price_max and price_max > 0 else 999999
+    low = price_min if price_min and price_min >= 0 else 0
     return {
         "isSize": False,
         "isWeddingCatagory": "false",
         "isMultipleCategoryIds": False,
         "isFromHeaderMenuTab": False,
         "layout": "",
-        "searchText": query.replace('"', ""),
+        "searchText": (query or "").replace('"', ""),
         "selectedGroup": "",
         "selectedCategoryIds": "",
         "selectedSellerIds": "",
-        "lowPrice": "0",
-        "highPrice": "999999",
-        "searchBuyNowOnly": "",
+        "lowPrice": str(low),
+        "highPrice": str(high),
+        "searchBuyNowOnly": "true" if buy_now_only else "",
         "searchPickupOnly": "false",
-        "searchNoPickupOnly": "false",
+        "searchNoPickupOnly": "true" if no_pickup else "false",
         "searchOneCentShippingOnly": "false",
         "searchDescriptions": "false",
-        "searchClosedAuctions": "false",
+        "searchClosedAuctions": "true" if include_closed else "false",
         "closedAuctionEndingDate": "1/1/0001",
-        "closedAuctionDaysBack": "7",
+        "closedAuctionDaysBack": str(int(closed_days_back) if include_closed else 7),
         "searchCanadaShipping": "false",
         "searchInternationalShippingOnly": "false",
-        "sortColumn": "1",
-        "sortDescending": "false",
+        "sortColumn": sort_col,
+        "sortDescending": sort_desc,
         "savedSearchId": 0,
         "useBuyerPrefs": "true",
         "searchUSOnlyShipping": "false",
@@ -242,22 +279,31 @@ def _shopgoodwill_payload(query: str, page: int, page_size: int) -> dict:
     }
 
 
-def _shopgoodwill_request(query: str, page: int, page_size: int) -> requests.Response:
+def _shopgoodwill_request(
+    *, query: str, page: int, page_size: int, **filters: Any
+) -> requests.Response:
     headers = dict(DEFAULT_HEADERS)
     token = os.environ.get("SHOPGOODWILL_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    payload = _build_search_payload(
+        query=query, page=page, page_size=page_size, **filters,
+    )
     return requests.post(
         f"{SHOPGOODWILL_BASE}/Search/ItemListing",
-        json=_shopgoodwill_payload(query, page, page_size),
+        json=payload,
         headers=headers,
         timeout=20,
     )
 
 
-def _search_shopgoodwill(query: str, page: int = 1, page_size: int = 40) -> List[dict]:
+def _search_shopgoodwill(
+    query: str, page: int = 1, page_size: int = 40, **filters: Any
+) -> List[dict]:
     try:
-        resp = _shopgoodwill_request(query, page, page_size)
+        resp = _shopgoodwill_request(
+            query=query, page=page, page_size=page_size, **filters,
+        )
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
 
@@ -765,19 +811,50 @@ def store_remove_favorite(item_id: int) -> list:
 
 @app.get("/api/feed", response_model=List[FeedItem])
 def get_feed(
-    brand: str = Query(..., min_length=1),
+    brand: str = Query(""),
     page: int = Query(1, ge=1),
     page_size: int = Query(40, ge=1, le=100),
+    q: str = Query("", description="Free-text search refinement"),
+    sort: str = Query("ending_soon", description="Sort key"),
+    price_min: float = Query(0, ge=0),
+    price_max: float = Query(0, ge=0),
+    buy_now_only: bool = Query(False),
+    no_pickup: bool = Query(False),
+    has_bids: bool = Query(False),
+    include_closed: bool = Query(False),
+    closed_days_back: int = Query(7, ge=1, le=30),
 ):
-    raw_items = _search_shopgoodwill(brand, page=page, page_size=page_size)
+    brand = (brand or "").strip()
+    q = (q or "").strip()
+    parts = [p for p in (brand, q) if p]
+    if not parts:
+        raise HTTPException(status_code=400, detail="Provide brand or q (search query)")
+    search_text = " ".join(parts)
+
+    raw_items = _search_shopgoodwill(
+        search_text,
+        page=page,
+        page_size=page_size,
+        sort=sort,
+        price_min=price_min,
+        price_max=price_max,
+        buy_now_only=buy_now_only,
+        no_pickup=no_pickup,
+        include_closed=include_closed,
+        closed_days_back=closed_days_back,
+    )
     items: List[FeedItem] = []
+    label = brand or q
     for raw in raw_items:
         try:
-            normalized = _normalize_item(raw, brand)
+            normalized = _normalize_item(raw, label)
         except Exception:
             continue
-        if normalized is not None:
-            items.append(normalized)
+        if normalized is None:
+            continue
+        if has_bids and normalized.bid_count <= 0:
+            continue
+        items.append(normalized)
     return items
 
 
@@ -837,7 +914,7 @@ def api_place_bid(req: BidRequest):
 @app.get("/api/debug/upstream")
 def debug_upstream(brand: str = "Coach", page: int = 1, page_size: int = 5):
     try:
-        resp = _shopgoodwill_request(brand, page, page_size)
+        resp = _shopgoodwill_request(query=brand, page=page, page_size=page_size)
     except requests.RequestException as exc:
         return {"network_error": str(exc)}
     snippet = (resp.text or "")[:600]
