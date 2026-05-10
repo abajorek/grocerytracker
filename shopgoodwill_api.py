@@ -2,17 +2,20 @@
 """
 Goodwill Hunting - ShopGoodwill TikTok-style backend.
 
-Highlights since the last summary:
-  * /api/snipes for scheduled last-second bids; /api/snipe/tick is the
-    cron-driven wake-up that spawns daemon threads which sleep until
-    exact fire_at and then call _place_bid.
-  * /api/retail (Claude vision retail-price lookup) — needs ANTHROPIC_API_KEY.
-  * /api/picks (saved-search seed) — UI is paused but routes remain.
+Highlights:
+  * /api/login + /api/logout + /api/auth/status: in-app ShopGoodwill
+    login that stores the returned JWT in Supabase. Replaces the
+    SHOPGOODWILL_TOKEN env-var dance for the common case; the env var
+    is still honored as a fallback when no session token is stored.
+  * /api/snipes (schedule) + /api/snipe/tick (cron-driven worker).
+  * /api/retail (Claude vision retail-price lookup).
+  * /api/picks (saved-search seed; UI is paused).
 
 Deploy notes:
-  * Render free tier sleeps after 15 min idle. Set up cron-job.org (or
-    similar) hitting /api/snipe/tick?key=$SNIPE_TICK_SECRET every 60s
-    to keep the worker awake AND to fire scheduled snipes on time.
+  * Render free tier sleeps after 15 min idle. Set up cron-job.org
+    pinging /api/snipe/tick?key=$SNIPE_TICK_SECRET every 60s.
+  * For first-time setup either add SHOPGOODWILL_TOKEN env var, or
+    just hit the Sign-in chip in the app and provide username/password.
 """
 
 import html as html_module
@@ -51,9 +54,11 @@ FAVORITES_FILE = DATA_DIR / "favorites.json"
 BRANDS_FILE = DATA_DIR / "brands.json"
 PICKS_FILE = DATA_DIR / "picks.json"
 SNIPES_FILE = DATA_DIR / "snipes.json"
+AUTH_FILE = DATA_DIR / "auth.json"
 FRONTEND_FILE = ROOT / "shopgoodwill_feed.html"
 PICKS_JS_FILE = ROOT / "picks.js"
 SNIPE_JS_FILE = ROOT / "snipe.js"
+AUTH_JS_FILE = ROOT / "auth.js"
 MANIFEST_FILE = ROOT / "manifest.webmanifest"
 ICON_FILE = ROOT / "icon.svg"
 
@@ -146,9 +151,11 @@ _FRAME_INJECTION = (
     "window.setBidNotice=setBidNotice;"
     "window.openBidSheet=openBidSheet;"
     "window.fmtPrice=fmtPrice;"
+    "window.renderBrandBar=renderBrandBar;"
     "}catch(e){}})()</script>"
     "<script src=\"/picks.js?v=4\"></script>"
     "<script src=\"/snipe.js?v=1\"></script>"
+    "<script src=\"/auth.js?v=1\"></script>"
 )
 
 
@@ -190,6 +197,12 @@ class SnipeRequest(BaseModel):
     lead_seconds: int = 8
     title: Optional[str] = ""
     image_url: Optional[str] = ""
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    remember: bool = True
 
 
 app = FastAPI(title="Goodwill Hunting")
@@ -295,6 +308,154 @@ DEFAULT_HEADERS = {
 }
 
 
+# ---------- auth (ShopGoodwill JWT, stored in Supabase) ----------
+
+_AUTH_LOCK = threading.Lock()
+
+
+def _supabase_enabled():
+    return bool(SUPABASE_URL and SUPABASE_KEY)
+
+
+def _supabase(method, path, *, body=None, params=None, prefer=None):
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if prefer:
+        headers["Prefer"] = prefer
+    try:
+        resp = requests.request(method, f"{SUPABASE_URL}/rest/v1/{path}",
+                                headers=headers, params=params, json=body, timeout=15)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Supabase network error: {exc}")
+    if not resp.ok:
+        raise HTTPException(status_code=502, detail=f"Supabase {resp.status_code}: {resp.text[:240]}")
+    if not resp.text:
+        return []
+    try:
+        return resp.json()
+    except ValueError:
+        return []
+
+
+def _read_session_auth() -> Optional[dict]:
+    """Stored session credentials (token + username) from Supabase or local
+    JSON fallback. Returns dict like {token, username, saved_at} or None."""
+    if _supabase_enabled():
+        try:
+            rows = _supabase("GET", "thrift_settings",
+                             params={"key": "eq.shopgoodwill_auth", "select": "value"})
+        except HTTPException:
+            return None
+        if rows and rows[0].get("value"):
+            value = rows[0]["value"]
+            if isinstance(value, dict) and value.get("token"):
+                return value
+        return None
+    cached = _read_json(AUTH_FILE, None)
+    if isinstance(cached, dict) and cached.get("token"):
+        return cached
+    return None
+
+
+def _save_session_auth(token: str, username: str) -> dict:
+    payload = {
+        "token": token,
+        "username": username,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with _AUTH_LOCK:
+        if _supabase_enabled():
+            _supabase("POST", "thrift_settings",
+                      body={"key": "shopgoodwill_auth", "value": payload},
+                      prefer="return=minimal,resolution=merge-duplicates")
+        else:
+            _write_json(AUTH_FILE, payload)
+    return payload
+
+
+def _clear_session_auth():
+    with _AUTH_LOCK:
+        if _supabase_enabled():
+            try:
+                _supabase("DELETE", "thrift_settings",
+                          params={"key": "eq.shopgoodwill_auth"})
+            except HTTPException:
+                pass
+        elif AUTH_FILE.exists():
+            try:
+                AUTH_FILE.unlink()
+            except Exception:
+                pass
+
+
+def _get_active_token() -> str:
+    """Active ShopGoodwill JWT — Supabase session first, env-var fallback."""
+    sess = _read_session_auth()
+    if sess and sess.get("token"):
+        return str(sess["token"]).strip()
+    return (os.environ.get("SHOPGOODWILL_TOKEN") or "").strip()
+
+
+def _shopgoodwill_login(username: str, password: str, remember: bool = True) -> dict:
+    """Call ShopGoodwill's auth endpoint and return the parsed response."""
+    payload = {
+        "username": username,
+        "password": password,
+        "remember": bool(remember),
+        "clientIpAddress": "0.0.0.0",
+        "browser": DEFAULT_HEADERS["User-Agent"],
+        "appVersion": "Goodwill-Hunting/1.0",
+    }
+    headers = dict(DEFAULT_HEADERS)
+    try:
+        resp = requests.post(f"{SHOPGOODWILL_BASE}/SignIn/Login",
+                             json=payload, headers=headers, timeout=15)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"ShopGoodwill network error: {exc}")
+    if resp.status_code in (400, 401, 403):
+        try:
+            data = resp.json()
+            msg = (data.get("message") or data.get("error")
+                   or data.get("title") or "").strip()
+        except ValueError:
+            msg = ""
+        if not msg:
+            msg = (
+                "ShopGoodwill rejected the login. Double-check the email and "
+                "password — note that ShopGoodwill is case-sensitive on email."
+            )
+        raise HTTPException(status_code=401, detail=msg)
+    if not resp.ok:
+        body = (resp.text or "")[:300].replace("\n", " ")
+        raise HTTPException(status_code=502,
+                            detail=f"ShopGoodwill returned {resp.status_code}: {body}")
+    try:
+        return resp.json()
+    except ValueError:
+        raise HTTPException(status_code=502,
+                            detail="Login response was not JSON.")
+
+
+def _extract_token_from_login(data: dict) -> Optional[str]:
+    if not isinstance(data, dict):
+        return None
+    for key in ("accessToken", "access_token", "token", "authToken", "jwt"):
+        v = data.get(key)
+        if isinstance(v, str) and v.startswith("eyJ"):
+            return v
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        return _extract_token_from_login(inner)
+    return None
+
+
+# ---------- shopgoodwill core ----------
+
 def _build_search_payload(*, query, page, page_size, sort="ending_soon",
                           price_min=0, price_max=0, buy_now_only=False,
                           no_pickup=False, include_closed=False, closed_days_back=7):
@@ -326,7 +487,7 @@ def _build_search_payload(*, query, page, page_size, sort="ending_soon",
 
 def _shopgoodwill_request(*, query, page, page_size, **filters):
     headers = dict(DEFAULT_HEADERS)
-    token = os.environ.get("SHOPGOODWILL_TOKEN")
+    token = _get_active_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     payload = _build_search_payload(query=query, page=page, page_size=page_size, **filters)
@@ -357,11 +518,11 @@ def _search_shopgoodwill(query, page=1, page_size=40, **filters):
 
 
 def _place_bid(item_id, amount, quantity=1):
-    token = os.environ.get("SHOPGOODWILL_TOKEN")
+    token = _get_active_token()
     if not token:
         raise HTTPException(status_code=401, detail=(
-            "SHOPGOODWILL_TOKEN is not set on the server. Add your ShopGoodwill "
-            "JWT in Render → Environment to enable bidding."
+            "Not signed in to ShopGoodwill. Tap the Sign in chip in the app, "
+            "or set SHOPGOODWILL_TOKEN in Render → Environment."
         ))
     headers = dict(DEFAULT_HEADERS)
     headers["Authorization"] = f"Bearer {token}"
@@ -372,9 +533,11 @@ def _place_bid(item_id, amount, quantity=1):
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
     if resp.status_code in (401, 403):
+        # Token is bad — clear the stored session so the user is prompted to re-login.
+        _clear_session_auth()
         raise HTTPException(status_code=401, detail=(
-            "ShopGoodwill rejected the token (it may be expired). Log in again "
-            "and update SHOPGOODWILL_TOKEN in Render → Environment."
+            "ShopGoodwill rejected the session (likely expired). Tap Sign in "
+            "and re-enter credentials."
         ))
     if not resp.ok:
         body = (resp.text or "")[:300].replace("\n", " ")
@@ -518,7 +681,7 @@ def _fetch_item_detail(item_id):
     if cached and time.time() - cached["t"] < _DETAIL_TTL:
         return cached["v"]
     headers = dict(DEFAULT_HEADERS)
-    token = os.environ.get("SHOPGOODWILL_TOKEN")
+    token = _get_active_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     try:
@@ -656,34 +819,6 @@ def _retail_estimate(item_id, title, brand, image_url):
         for k in list(_RETAIL_CACHE.keys())[:100]:
             _RETAIL_CACHE.pop(k, None)
     return result
-
-
-def _supabase_enabled():
-    return bool(SUPABASE_URL and SUPABASE_KEY)
-
-
-def _supabase(method, path, *, body=None, params=None, prefer=None):
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    if prefer:
-        headers["Prefer"] = prefer
-    try:
-        resp = requests.request(method, f"{SUPABASE_URL}/rest/v1/{path}",
-                                headers=headers, params=params, json=body, timeout=15)
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"Supabase network error: {exc}")
-    if not resp.ok:
-        raise HTTPException(status_code=502, detail=f"Supabase {resp.status_code}: {resp.text[:240]}")
-    if not resp.text:
-        return []
-    try:
-        return resp.json()
-    except ValueError:
-        return []
 
 
 def store_get_brands():
@@ -901,7 +1036,6 @@ def _save_snipes(snipes: List[dict]):
 
 
 def _patch_snipe(snipe_id: str, **fields) -> Optional[dict]:
-    """Atomic-ish read-modify-write for a single snipe by id."""
     with _SNIPE_LOCK:
         snipes = _load_snipes()
         for s in snipes:
@@ -928,7 +1062,6 @@ def _check_snipe_key(key: str) -> bool:
 
 
 def _execute_snipe(snipe_id: str):
-    """Sleep until exact fire_at, then place the bid. Runs in a daemon thread."""
     snipes = _load_snipes()
     snipe = next((s for s in snipes if s.get("id") == snipe_id), None)
     if not snipe:
@@ -936,13 +1069,11 @@ def _execute_snipe(snipe_id: str):
     try:
         fire_at = _parse_iso(snipe["fire_at"])
         delta = (fire_at - datetime.now(timezone.utc)).total_seconds()
-        # Cap at 5 minutes to protect against absurd schedules.
         if delta > 0:
             time.sleep(min(delta, 300))
         result = _place_bid(int(snipe["item_id"]), float(snipe["amount"]), 1)
         _patch_snipe(
-            snipe_id,
-            status="fired",
+            snipe_id, status="fired",
             fired_at=datetime.now(timezone.utc).isoformat(),
             result=json.dumps(result)[:400],
         )
@@ -1045,7 +1176,66 @@ def api_place_bid(req: BidRequest):
     return {"ok": True, "result": _place_bid(req.item_id, req.amount, req.quantity)}
 
 
-# ----- snipe endpoints -----
+# ----- auth -----
+
+@app.get("/api/auth/status")
+def auth_status():
+    sess = _read_session_auth()
+    if sess and sess.get("token"):
+        return {
+            "authenticated": True,
+            "username": sess.get("username") or "",
+            "source": "session",
+            "saved_at": sess.get("saved_at", ""),
+        }
+    if (os.environ.get("SHOPGOODWILL_TOKEN") or "").strip():
+        return {
+            "authenticated": True,
+            "username": "(env-var token)",
+            "source": "env",
+            "saved_at": "",
+        }
+    return {"authenticated": False, "username": "", "source": "none", "saved_at": ""}
+
+
+@app.post("/api/login")
+def api_login(req: LoginRequest):
+    username = (req.username or "").strip()
+    if not username or not req.password:
+        raise HTTPException(status_code=400, detail="username and password required")
+    data = _shopgoodwill_login(username, req.password, remember=req.remember)
+    token = _extract_token_from_login(data)
+    if not token:
+        # Best-effort error message: surface the response keys so we can debug
+        # without ever logging the password.
+        keys = ", ".join(list(data.keys())[:8]) if isinstance(data, dict) else "<non-dict>"
+        raise HTTPException(
+            status_code=502,
+            detail=f"Login succeeded but no JWT in response (keys: {keys}).",
+        )
+    display_name = ""
+    if isinstance(data, dict):
+        display_name = (
+            data.get("username") or data.get("userName")
+            or data.get("name") or data.get("displayName") or ""
+        )
+        inner = data.get("data")
+        if not display_name and isinstance(inner, dict):
+            display_name = (
+                inner.get("username") or inner.get("userName")
+                or inner.get("name") or inner.get("displayName") or ""
+            )
+    saved = _save_session_auth(token, str(display_name or username))
+    return {"ok": True, "username": saved["username"], "source": "session"}
+
+
+@app.post("/api/logout")
+def api_logout():
+    _clear_session_auth()
+    return {"ok": True}
+
+
+# ----- snipes -----
 
 @app.post("/api/snipes")
 def schedule_snipe(req: SnipeRequest):
@@ -1063,7 +1253,6 @@ def schedule_snipe(req: SnipeRequest):
     now_utc = datetime.now(timezone.utc)
     if fire_at <= now_utc + timedelta(seconds=2):
         raise HTTPException(400, "auction is too close to its end to schedule a snipe")
-
     snipe = {
         "id": "snipe_" + uuid.uuid4().hex[:12],
         "item_id": int(req.item_id),
@@ -1114,9 +1303,6 @@ def cancel_snipe(snipe_id: str):
 
 @app.api_route("/api/snipe/tick", methods=["GET", "POST"])
 def snipe_tick(request: Request, key: str = Query(default="")):
-    """Cron-driven worker wake-up. Pings the worker (keeping Render free
-    tier awake) and spawns daemon threads for any snipes whose fire_at is
-    within the next 90 seconds."""
     header_key = (request.headers.get("x-snipe-key") or "").strip()
     if not _check_snipe_key(key or header_key):
         raise HTTPException(403, "invalid or missing snipe key")
@@ -1142,12 +1328,8 @@ def snipe_tick(request: Request, key: str = Query(default="")):
         threading.Thread(target=_execute_snipe, args=(sid,), daemon=True).start()
     pending = sum(1 for s in snipes if s.get("status") == "scheduled")
     return {
-        "ok": True,
-        "now": now.isoformat(),
-        "horizon": horizon.isoformat(),
-        "spawned": spawned,
-        "pending": pending,
-        "total": len(snipes),
+        "ok": True, "now": now.isoformat(), "horizon": horizon.isoformat(),
+        "spawned": spawned, "pending": pending, "total": len(snipes),
     }
 
 
@@ -1161,7 +1343,7 @@ def debug_upstream(brand: str = "Coach", page: int = 1, page_size: int = 5):
         "status": resp.status_code,
         "content_type": resp.headers.get("Content-Type", ""),
         "body_snippet": (resp.text or "")[:600],
-        "has_token": bool(os.environ.get("SHOPGOODWILL_TOKEN")),
+        "has_token": bool(_get_active_token()),
     }
 
 
@@ -1229,11 +1411,16 @@ def remove_favorite(item_id: int):
 
 @app.get("/api/health")
 def health():
+    sess = _read_session_auth()
     snipes = _load_snipes() if (_supabase_enabled() or SNIPES_FILE.exists()) else []
     return {
         "ok": True,
         "storage": "supabase" if _supabase_enabled() else "file",
-        "bidding": bool(os.environ.get("SHOPGOODWILL_TOKEN")),
+        "bidding": bool(_get_active_token()),
+        "auth_source": "session" if (sess and sess.get("token")) else (
+            "env" if (os.environ.get("SHOPGOODWILL_TOKEN") or "").strip() else "none"
+        ),
+        "auth_username": (sess or {}).get("username", "") if sess else "",
         "retail_lookup": bool(ANTHROPIC_API_KEY),
         "retail_model": ANTHROPIC_MODEL if ANTHROPIC_API_KEY else None,
         "picks": len(store_get_picks()),
@@ -1254,6 +1441,13 @@ def serve_picks_js():
 def serve_snipe_js():
     if SNIPE_JS_FILE.exists():
         return FileResponse(str(SNIPE_JS_FILE), media_type="application/javascript")
+    raise HTTPException(status_code=404)
+
+
+@app.get("/auth.js")
+def serve_auth_js():
+    if AUTH_JS_FILE.exists():
+        return FileResponse(str(AUTH_JS_FILE), media_type="application/javascript")
     raise HTTPException(status_code=404)
 
 
