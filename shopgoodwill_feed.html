@@ -102,6 +102,29 @@
       background: var(--coral); color: #fff;
       border-color: var(--coral-deep); border-style: solid;
     }
+    .chip.filter {
+      background: transparent;
+      color: var(--ink-soft);
+      border: 1px dashed rgba(28,28,26,0.25);
+      padding: 8px 14px;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .chip.filter.has-active {
+      background: var(--olive);
+      color: #fff;
+      border-color: var(--olive-deep);
+      border-style: solid;
+    }
+    .chip.filter .filter-count {
+      background: rgba(255,255,255,0.25);
+      color: inherit;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .chip.filter:not(.has-active) .filter-count { display: none; }
 
     .feed {
       height: 100vh; height: 100dvh;
@@ -228,6 +251,14 @@
       box-shadow: var(--shadow);
       letter-spacing: -0.2px;
     }
+    .price-tag .price-prefix {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--olive);
+      text-transform: uppercase;
+      margin-right: 5px;
+    }
     .time-tag {
       background: rgba(250,250,247,0.92);
       color: var(--ink);
@@ -237,6 +268,7 @@
       font-weight: 600;
     }
     .time-tag.urgent { background: var(--coral-deep); color: #fff; }
+    .time-tag.sold { background: var(--olive); color: #fff; }
     .bid-tag {
       background: rgba(28,28,26,0.85);
       color: var(--paper);
@@ -427,7 +459,20 @@
       letter-spacing: -0.6px;
       line-height: 1.1;
     }
-    .center-msg p { color: var(--ink-soft); max-width: 320px; line-height: 1.45; }
+    .center-msg p { color: var(--ink-soft); max-width: 340px; line-height: 1.45; }
+    .center-msg .ghint {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: var(--paper-2);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--hairline);
+      font-family: inherit;
+    }
     .dots { margin-top: 14px; display: inline-flex; gap: 6px; }
     .dots span {
       width: 8px; height: 8px; border-radius: 50%;
@@ -466,7 +511,9 @@
       font-size: 13px;
       margin-bottom: 16px;
     }
-    .modal input {
+    .modal input[type=text],
+    .modal input[type=number],
+    .modal input:not([type]) {
       width: 100%;
       padding: 12px 14px;
       border-radius: 10px;
@@ -491,6 +538,88 @@
       font-family: inherit;
       font-size: 14px;
     }
+
+    /* ---- filter modal ---- */
+    .filter-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin: 14px 0 6px;
+    }
+    .filter-label:first-of-type { margin-top: 0; }
+    .filter-radios {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .filter-radios label {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px;
+      background: var(--paper);
+      border: 1px solid var(--hairline);
+      border-radius: 10px;
+      font-size: 13px;
+      color: var(--ink);
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .filter-radios label:has(input:checked) {
+      background: var(--ink);
+      color: var(--paper);
+      border-color: var(--ink);
+    }
+    .filter-radios input[type=radio] {
+      width: 14px; height: 14px;
+      accent-color: var(--coral);
+      flex-shrink: 0;
+      margin: 0;
+    }
+    .filter-price {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 4px;
+    }
+    .filter-price input {
+      flex: 1;
+      margin-bottom: 0 !important;
+    }
+    .filter-dash {
+      color: var(--ink-soft);
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .filter-toggles {
+      display: flex; flex-direction: column;
+      gap: 4px;
+      padding: 4px 0 0;
+    }
+    .filter-toggle {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px;
+      background: var(--paper-2);
+      border-radius: 10px;
+      font-size: 14px;
+      color: var(--ink);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .filter-toggle input[type=checkbox] {
+      width: 18px; height: 18px;
+      accent-color: var(--ink);
+      flex-shrink: 0;
+      margin: 0;
+    }
+    .filter-toggle .toggle-hint {
+      display: block;
+      font-size: 11px;
+      color: var(--ink-soft);
+      margin-top: 2px;
+      line-height: 1.35;
+    }
+    .filter-toggle .toggle-text { flex: 1; }
 
     .bid-thumb-row {
       display: flex;
@@ -701,6 +830,7 @@
       .gallery-pip { bottom: calc(env(safe-area-inset-bottom, 16px) + 165px); }
       .brand-bar h1 { font-size: 18px; }
       .action-btn { width: 46px; height: 46px; font-size: 18px; }
+      .filter-radios { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -714,7 +844,8 @@
       <div class="center-msg">
         <div>
           <h3>Pick a brand</h3>
-          <p>Tap a chip up top to start. Flick up for the next find. Swipe right to save · swipe left to bid.</p>
+          <p>Tap a chip up top, or hit ⚙ to search anything across ShopGoodwill.</p>
+          <button class="ghint" onclick="openFilterModal()">Open filters ⚙</button>
         </div>
       </div>
     </div>
@@ -737,10 +868,61 @@
     </div>
   </div>
 
+  <div class="modal-bg" id="filterModalBg">
+    <div class="modal">
+      <h3>Filter &amp; sort</h3>
+      <div class="modal-sub" id="filterScope">Refine the current view.</div>
+
+      <label class="filter-label" for="filterQ">Search</label>
+      <input id="filterQ" type="text" placeholder="e.g. willis bag, peacoat, dressage" autocomplete="off">
+
+      <label class="filter-label">Sort by</label>
+      <div class="filter-radios" id="filterSortRow">
+        <label><input type="radio" name="sort" value="ending_soon" checked> Ending soonest</label>
+        <label><input type="radio" name="sort" value="newly_listed"> Newly listed</label>
+        <label><input type="radio" name="sort" value="price_low"> Price: low → high</label>
+        <label><input type="radio" name="sort" value="price_high"> Price: high → low</label>
+        <label><input type="radio" name="sort" value="most_bids"> Most bids</label>
+      </div>
+
+      <label class="filter-label">Price ($)</label>
+      <div class="filter-price">
+        <input id="filterPriceMin" type="number" min="0" inputmode="decimal" placeholder="Min">
+        <span class="filter-dash">to</span>
+        <input id="filterPriceMax" type="number" min="0" inputmode="decimal" placeholder="Max">
+      </div>
+
+      <label class="filter-label">Toggles</label>
+      <div class="filter-toggles">
+        <label class="filter-toggle">
+          <input type="checkbox" id="filterBuyNow">
+          <span class="toggle-text">Buy It Now only<span class="toggle-hint">Skip auctions — fixed-price only.</span></span>
+        </label>
+        <label class="filter-toggle">
+          <input type="checkbox" id="filterNoPickup">
+          <span class="toggle-text">Hide pickup-only items<span class="toggle-hint">Show only items that ship.</span></span>
+        </label>
+        <label class="filter-toggle">
+          <input type="checkbox" id="filterHasBids">
+          <span class="toggle-text">Only items with bids<span class="toggle-hint">See what others are watching.</span></span>
+        </label>
+        <label class="filter-toggle">
+          <input type="checkbox" id="filterClosed">
+          <span class="toggle-text">Include sold auctions<span class="toggle-hint">Last 7 days, for price research.</span></span>
+        </label>
+      </div>
+
+      <div class="modal-actions" style="margin-top:18px;">
+        <button class="btn-secondary" onclick="resetFilters()">Reset</button>
+        <button class="btn-primary" onclick="applyFilters()">Apply</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-bg" id="bidModalBg">
     <div class="modal">
-      <h3>Place a bid</h3>
-      <div class="modal-sub">Pick an amount or type your own.</div>
+      <h3 id="bidHeader">Place a bid</h3>
+      <div class="modal-sub" id="bidSub">Pick an amount or type your own.</div>
       <div class="bid-thumb-row">
         <img id="bidThumb" alt="">
         <div>
@@ -753,7 +935,7 @@
       <input id="bidCustom" type="number" inputmode="decimal" step="0.01" placeholder="Custom amount">
       <div class="bid-notice" id="bidNotice"></div>
       <div class="modal-actions">
-        <button class="btn-secondary" onclick="closeBidModal()">Cancel</button>
+        <button class="btn-secondary" id="bidCancel" onclick="closeBidModal()">Cancel</button>
         <button class="btn-primary" id="bidConfirm" disabled>Place bid</button>
       </div>
     </div>
@@ -772,6 +954,17 @@
     const SWIPE_VERTICAL_TOLERANCE = 60;
     const SWIPE_PEEK_DISTANCE = 30;
 
+    const DEFAULT_FILTERS = {
+      q: '',
+      sort: 'ending_soon',
+      priceMin: '',
+      priceMax: '',
+      buyNowOnly: false,
+      noPickup: false,
+      hasBids: false,
+      includeClosed: false,
+    };
+
     const state = {
       brands: [],
       activeBrand: null,
@@ -781,6 +974,7 @@
       mode: 'feed',
       loading: false,
       exhausted: false,
+      filters: { ...DEFAULT_FILTERS },
     };
 
     const galleryCache = new Map();
@@ -867,9 +1061,48 @@
       renderBrandModal();
     }
 
+    function activeFilterCount() {
+      const f = state.filters;
+      let n = 0;
+      if (f.q) n++;
+      if (f.sort && f.sort !== 'ending_soon') n++;
+      if (f.priceMin) n++;
+      if (f.priceMax) n++;
+      if (f.buyNowOnly) n++;
+      if (f.noPickup) n++;
+      if (f.hasBids) n++;
+      if (f.includeClosed) n++;
+      return n;
+    }
+
+    function feedQueryParams() {
+      const f = state.filters;
+      const params = new URLSearchParams();
+      if (state.activeBrand) params.set('brand', state.activeBrand);
+      params.set('page', String(state.page));
+      if (f.q) params.set('q', f.q);
+      if (f.sort && f.sort !== 'ending_soon') params.set('sort', f.sort);
+      if (f.priceMin) params.set('price_min', f.priceMin);
+      if (f.priceMax) params.set('price_max', f.priceMax);
+      if (f.buyNowOnly) params.set('buy_now_only', 'true');
+      if (f.noPickup) params.set('no_pickup', 'true');
+      if (f.hasBids) params.set('has_bids', 'true');
+      if (f.includeClosed) params.set('include_closed', 'true');
+      return params.toString();
+    }
+
     function renderBrandBar() {
       const bar = document.getElementById('brandBar');
       bar.innerHTML = '<h1>Goodwill Hunting</h1>';
+
+      const flt = document.createElement('button');
+      const fcount = activeFilterCount();
+      flt.className = 'chip filter' + (fcount > 0 ? ' has-active' : '');
+      flt.innerHTML = `⚙<span class="filter-count">${fcount}</span>`;
+      flt.setAttribute('aria-label', 'Filter and sort');
+      flt.onclick = openFilterModal;
+      bar.appendChild(flt);
+
       state.brands.forEach(b => {
         const c = document.createElement('button');
         c.className = 'chip' + (state.mode === 'feed' && b === state.activeBrand ? ' active' : '');
@@ -909,17 +1142,40 @@
       await loadMore();
     }
 
+    async function reloadFeed(message) {
+      state.page = 1;
+      state.items = [];
+      state.exhausted = false;
+      state.mode = 'feed';
+      const heading = state.activeBrand
+        ? `Refreshing ${escapeHtml(state.activeBrand)}…`
+        : (state.filters.q ? `Searching “${escapeHtml(state.filters.q)}”…` : 'Loading…');
+      document.getElementById('feed').innerHTML = `
+        <div class="card">
+          <div class="center-msg">
+            <div>
+              <h3>${heading}</h3>
+              <p>${escapeHtml(message || 'Pulling fresh listings.')}</p>
+              <div class="dots"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+        </div>`;
+      await loadMore();
+    }
+
     async function loadMore() {
-      if (state.mode !== 'feed' || !state.activeBrand || state.loading || state.exhausted) return;
+      if (state.mode !== 'feed' || state.loading || state.exhausted) return;
+      if (!state.activeBrand && !state.filters.q) return;
       state.loading = true;
       let warmTimer = null;
       if (state.items.length === 0) {
         warmTimer = setTimeout(() => {
-          document.getElementById('feed').innerHTML = warmingCard(state.activeBrand);
+          document.getElementById('feed').innerHTML = warmingCard(state.activeBrand || state.filters.q);
         }, 4000);
       }
       try {
-        const items = await apiGet(`/api/feed?brand=${encodeURIComponent(state.activeBrand)}&page=${state.page}`);
+        const params = feedQueryParams();
+        const items = await apiGet(`/api/feed?${params}`);
         if (warmTimer) clearTimeout(warmTimer);
         if (!items.length) state.exhausted = true;
         state.items.push(...items);
@@ -936,11 +1192,14 @@
     function renderFeed() {
       const feed = document.getElementById('feed');
       if (state.items.length === 0) {
+        const subject = state.activeBrand || state.filters.q;
         feed.innerHTML = `
           <div class="card">
             <div class="center-msg">
-              <div><h3>No ${escapeHtml(state.activeBrand)} listings</h3>
-              <p>Try another pinned brand or check back soon.</p></div>
+              <div><h3>No matches</h3>
+              <p>Nothing on ShopGoodwill matches ${escapeHtml(subject)}
+              ${activeFilterCount() ? 'with these filters' : 'right now'}.</p>
+              ${activeFilterCount() ? '<button class="ghint" onclick="resetFiltersAndReload()">Clear filters</button>' : ''}</div>
             </div>
           </div>`;
         return;
@@ -959,10 +1218,14 @@
       const saved = state.favorites.has(it.id);
       const heart = saved ? '♥' : '♡';
       const heartCls = saved ? 'action-btn fav active' : 'action-btn fav';
-      const urgent = isUrgent(it.seconds_left) ? ' urgent' : '';
       const safeUrl = safeUrlForCss(it.image_url);
+      const closed = !!it.is_closed;
+      const urgent = !closed && isUrgent(it.seconds_left) ? ' urgent' : '';
+      const timeLabel = closed ? 'Sold' : fmtTime(it.seconds_left);
+      const timeCls = `time-tag${closed ? ' sold' : ''}${urgent}`;
+      const pricePrefix = closed ? '<span class="price-prefix">Sold</span>' : '';
       return `
-        <article class="card" data-idx="${idx}" data-id="${it.id}">
+        <article class="card" data-idx="${idx}" data-id="${it.id}" data-closed="${closed ? '1' : '0'}">
           <div class="card-bg" style="background-image:url('${safeUrl}');"></div>
           <img class="card-img" src="${escapeHtml(it.image_url)}" alt="" loading="${idx < 2 ? 'eager' : 'lazy'}" decoding="async" onerror="this.removeAttribute('src');">
           <div class="gallery-pip" data-pip>
@@ -973,13 +1236,13 @@
           <div class="card-shade"></div>
           <div class="burst" data-burst>♥</div>
           <div class="swipe-overlay save" data-overlay-save>♥ saved</div>
-          <div class="swipe-overlay bid"  data-overlay-bid>↗ bid</div>
+          <div class="swipe-overlay bid"  data-overlay-bid>${closed ? '↗ inspect' : '↗ bid'}</div>
           <div class="card-info">
             <div class="card-brand">${escapeHtml(it.brand)}</div>
             <div class="card-title">${escapeHtml(it.title)}</div>
             <div class="price-row">
-              <span class="price-tag">${fmtPrice(it.current_price)}</span>
-              <span class="time-tag${urgent}" data-time="${it.seconds_left}">${fmtTime(it.seconds_left)}</span>
+              <span class="price-tag">${pricePrefix}${fmtPrice(it.current_price)}</span>
+              <span class="${timeCls}" data-time="${closed ? 0 : it.seconds_left}">${timeLabel}</span>
               ${it.bid_count ? `<span class="bid-tag">${it.bid_count} bid${it.bid_count === 1 ? '' : 's'}</span>` : ''}
             </div>
           </div>
@@ -987,7 +1250,7 @@
             <button class="${heartCls}" data-fav aria-label="Save">${heart}</button>
             <button class="action-btn" data-info aria-label="Details">i</button>
             <button class="action-btn" data-zoom aria-label="Zoom photo"><span class="icon">⚶</span></button>
-            <button class="action-btn" data-bid aria-label="Bid">$</button>
+            <button class="action-btn" data-bid aria-label="${closed ? 'Inspect' : 'Bid'}">${closed ? 'i' : '$'}</button>
           </div>
         </article>`;
     }
@@ -1332,19 +1595,22 @@
       const seller = detail.seller || '';
       const notesHtml = renderNotesSection(detail.notes);
       const c = document.getElementById('drawerContent');
+      const isClosed = !!item.is_closed;
       c.innerHTML = `
         <span class="pill">${escapeHtml(item.brand)}</span>
         <h2>${escapeHtml(item.title)}</h2>
-        <div class="row"><b>Current bid</b><span>${fmtPrice(item.current_price)}</span></div>
-        <div class="row"><b>Minimum next bid</b><span>${fmtPrice(item.minimum_bid)}</span></div>
+        <div class="row"><b>${isClosed ? 'Sold for' : 'Current bid'}</b><span>${fmtPrice(item.current_price)}</span></div>
+        ${isClosed ? '' : `<div class="row"><b>Minimum next bid</b><span>${fmtPrice(item.minimum_bid)}</span></div>`}
         <div class="row"><b>Bids placed</b><span>${item.bid_count || 0}</span></div>
-        <div class="row"><b>Time left</b><span>${fmtTime(item.seconds_left)}</span></div>
+        <div class="row"><b>${isClosed ? 'Status' : 'Time left'}</b><span>${isClosed ? 'Ended' : fmtTime(item.seconds_left)}</span></div>
         ${location ? `<div class="row"><b>Location</b><span>${escapeHtml(location)}</span></div>` : ''}
         ${seller ? `<div class="row"><b>Seller</b><span>${escapeHtml(seller)}</span></div>` : ''}
         ${notesHtml}
         <div class="drawer-actions">
-          <button class="btn-primary" onclick="closeDrawer(); openBidSheet(${JSON.stringify(item).replace(/"/g, '&quot;')})">Bid</button>
-          <button class="btn-secondary" onclick="closeDrawer()">Close</button>
+          ${isClosed
+            ? `<button class="btn-primary" onclick="closeDrawer()">Close</button>`
+            : `<button class="btn-primary" onclick="closeDrawer(); openBidSheet(${JSON.stringify(item).replace(/"/g, '&quot;')})">Bid</button>
+               <button class="btn-secondary" onclick="closeDrawer()">Close</button>`}
         </div>`;
       document.getElementById('drawer').classList.add('open');
       document.getElementById('drawer').setAttribute('aria-hidden', 'false');
@@ -1389,6 +1655,96 @@
       };
     }
 
+    // ----- filter modal -----
+
+    function openFilterModal() {
+      const f = state.filters;
+      document.getElementById('filterQ').value = f.q || '';
+      document.getElementById('filterPriceMin').value = f.priceMin || '';
+      document.getElementById('filterPriceMax').value = f.priceMax || '';
+      document.getElementById('filterBuyNow').checked = !!f.buyNowOnly;
+      document.getElementById('filterNoPickup').checked = !!f.noPickup;
+      document.getElementById('filterHasBids').checked = !!f.hasBids;
+      document.getElementById('filterClosed').checked = !!f.includeClosed;
+      document.querySelectorAll('input[name="sort"]').forEach(r => {
+        r.checked = (r.value === (f.sort || 'ending_soon'));
+      });
+
+      const scope = document.getElementById('filterScope');
+      if (state.activeBrand) {
+        scope.textContent = `Refining ${state.activeBrand}.`;
+      } else if (state.filters.q) {
+        scope.textContent = `Searching “${state.filters.q}” across ShopGoodwill.`;
+      } else {
+        scope.textContent = 'Pick a brand chip first, or type a search term to browse all of ShopGoodwill.';
+      }
+
+      document.getElementById('filterModalBg').classList.add('open');
+      setTimeout(() => document.getElementById('filterQ').focus(), 60);
+    }
+
+    function closeFilterModal() {
+      document.getElementById('filterModalBg').classList.remove('open');
+    }
+
+    function readFiltersFromModal() {
+      return {
+        q: document.getElementById('filterQ').value.trim(),
+        sort: (document.querySelector('input[name="sort"]:checked') || {}).value || 'ending_soon',
+        priceMin: document.getElementById('filterPriceMin').value.trim(),
+        priceMax: document.getElementById('filterPriceMax').value.trim(),
+        buyNowOnly: document.getElementById('filterBuyNow').checked,
+        noPickup: document.getElementById('filterNoPickup').checked,
+        hasBids: document.getElementById('filterHasBids').checked,
+        includeClosed: document.getElementById('filterClosed').checked,
+      };
+    }
+
+    function applyFilters() {
+      state.filters = readFiltersFromModal();
+      closeFilterModal();
+      renderBrandBar();
+      if (state.activeBrand || state.filters.q) {
+        reloadFeed();
+      } else {
+        document.getElementById('feed').innerHTML = `
+          <div class="card">
+            <div class="center-msg">
+              <div>
+                <h3>Type a search term</h3>
+                <p>You haven't picked a brand. Open filters and add a search query to browse all of ShopGoodwill.</p>
+                <button class="ghint" onclick="openFilterModal()">Open filters ⚙</button>
+              </div>
+            </div>
+          </div>`;
+      }
+    }
+
+    function resetFilters() {
+      state.filters = { ...DEFAULT_FILTERS };
+      // re-populate UI from cleared state
+      document.getElementById('filterQ').value = '';
+      document.getElementById('filterPriceMin').value = '';
+      document.getElementById('filterPriceMax').value = '';
+      document.getElementById('filterBuyNow').checked = false;
+      document.getElementById('filterNoPickup').checked = false;
+      document.getElementById('filterHasBids').checked = false;
+      document.getElementById('filterClosed').checked = false;
+      document.querySelectorAll('input[name="sort"]').forEach(r => {
+        r.checked = (r.value === 'ending_soon');
+      });
+    }
+
+    function resetFiltersAndReload() {
+      state.filters = { ...DEFAULT_FILTERS };
+      renderBrandBar();
+      if (state.activeBrand) reloadFeed();
+    }
+
+    document.getElementById('filterModalBg').addEventListener('click', (e) => {
+      if (e.target.id === 'filterModalBg') closeFilterModal();
+    });
+
     // ----- bid sheet + retail estimate -----
 
     let bidContext = null;
@@ -1409,7 +1765,6 @@
           <div class="retail-empty">${escapeHtml(reason)}</div>`;
         return;
       }
-      // ok
       el.classList.add('show');
       const lo = Number(payload.retail_low) || 0;
       const hi = Number(payload.retail_high) || 0;
@@ -1452,51 +1807,72 @@
       bidContext = { item, amount: null };
       document.getElementById('bidThumb').src = item.image_url;
       document.getElementById('bidTitle').textContent = item.title;
-      document.getElementById('bidCurrent').textContent =
-        `Current ${fmtPrice(item.current_price)} · min next ${fmtPrice(item.minimum_bid)}`;
 
-      const min = Math.max(item.minimum_bid, item.current_price + 1);
-      const presets = [
-        { label: 'Min',     amount: min },
-        { label: 'Min +$1', amount: min + 1 },
-        { label: 'Min +$5', amount: min + 5 },
-        { label: 'Min +$10', amount: min + 10 },
-      ];
+      const closed = !!item.is_closed;
       const presetsEl = document.getElementById('bidPresets');
-      presetsEl.innerHTML = presets.map(p => `
-        <button class="bid-preset" data-amount="${p.amount}">
-          <span class="label">${escapeHtml(p.label)}</span>
-          ${fmtPrice(p.amount)}
-        </button>
-      `).join('');
-      presetsEl.querySelectorAll('.bid-preset').forEach(btn => {
-        btn.onclick = () => selectBidAmount(parseFloat(btn.dataset.amount), btn);
-      });
+      const customEl = document.getElementById('bidCustom');
+      const confirmBtn = document.getElementById('bidConfirm');
+      const cancelBtn = document.getElementById('bidCancel');
+      const header = document.getElementById('bidHeader');
+      const sub = document.getElementById('bidSub');
 
-      const custom = document.getElementById('bidCustom');
-      custom.value = '';
-      custom.placeholder = `Custom amount (e.g. ${(min + 2.50).toFixed(2)})`;
-      custom.oninput = () => {
-        const v = parseFloat(custom.value);
-        if (Number.isFinite(v) && v > 0) {
-          bidContext.amount = v;
-          presetsEl.querySelectorAll('.bid-preset').forEach(b => b.classList.remove('selected'));
-          document.getElementById('bidConfirm').disabled = false;
-        } else {
-          if (!presetsEl.querySelector('.bid-preset.selected')) {
-            document.getElementById('bidConfirm').disabled = true;
+      if (closed) {
+        header.textContent = 'Sold listing';
+        sub.textContent = 'This auction has ended — useful for price research.';
+        document.getElementById('bidCurrent').textContent = `Final price: ${fmtPrice(item.current_price)}`;
+        presetsEl.innerHTML = '';
+        presetsEl.style.display = 'none';
+        customEl.style.display = 'none';
+        confirmBtn.style.display = 'none';
+        cancelBtn.textContent = 'Close';
+        setBidNotice('');
+      } else {
+        header.textContent = 'Place a bid';
+        sub.textContent = 'Pick an amount or type your own.';
+        document.getElementById('bidCurrent').textContent =
+          `Current ${fmtPrice(item.current_price)} · min next ${fmtPrice(item.minimum_bid)}`;
+
+        const min = Math.max(item.minimum_bid, item.current_price + 1);
+        const presets = [
+          { label: 'Min',     amount: min },
+          { label: 'Min +$1', amount: min + 1 },
+          { label: 'Min +$5', amount: min + 5 },
+          { label: 'Min +$10', amount: min + 10 },
+        ];
+        presetsEl.style.display = '';
+        presetsEl.innerHTML = presets.map(p => `
+          <button class="bid-preset" data-amount="${p.amount}">
+            <span class="label">${escapeHtml(p.label)}</span>
+            ${fmtPrice(p.amount)}
+          </button>
+        `).join('');
+        presetsEl.querySelectorAll('.bid-preset').forEach(btn => {
+          btn.onclick = () => selectBidAmount(parseFloat(btn.dataset.amount), btn);
+        });
+
+        customEl.style.display = '';
+        customEl.value = '';
+        customEl.placeholder = `Custom amount (e.g. ${(min + 2.50).toFixed(2)})`;
+        customEl.oninput = () => {
+          const v = parseFloat(customEl.value);
+          if (Number.isFinite(v) && v > 0) {
+            bidContext.amount = v;
+            presetsEl.querySelectorAll('.bid-preset').forEach(b => b.classList.remove('selected'));
+            confirmBtn.disabled = false;
+          } else if (!presetsEl.querySelector('.bid-preset.selected')) {
+            confirmBtn.disabled = true;
             bidContext.amount = null;
           }
-        }
-      };
+        };
 
-      setBidNotice('');
-      const confirmBtn = document.getElementById('bidConfirm');
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = 'Place bid';
+        setBidNotice('');
+        confirmBtn.style.display = '';
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Place bid';
+        cancelBtn.textContent = 'Cancel';
+      }
+
       document.getElementById('bidModalBg').classList.add('open');
-
-      // Lazy retail estimate (Claude vision). Uses item_id; brand is hint.
       loadRetailFor(item.id, item.brand);
     }
 
@@ -1555,7 +1931,7 @@
     setInterval(() => {
       document.querySelectorAll('[data-time]').forEach(el => {
         let s = parseInt(el.dataset.time, 10);
-        if (!Number.isFinite(s)) return;
+        if (!Number.isFinite(s) || s <= 0) return;
         s = Math.max(0, s - 1);
         el.dataset.time = s;
         el.textContent = fmtTime(s);
