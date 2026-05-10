@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 """
-Goodwill Hunting - ShopGoodwill TikTok-style backend
+Goodwill Hunting - ShopGoodwill TikTok-style backend.
 
-See module docstring in earlier commits; only the picks bits and
-frame-injection bits are summarised here.
+Highlights since the last summary:
+  * /api/snipes for scheduled last-second bids; /api/snipe/tick is the
+    cron-driven wake-up that spawns daemon threads which sleep until
+    exact fire_at and then call _place_bid.
+  * /api/retail (Claude vision retail-price lookup) — needs ANTHROPIC_API_KEY.
+  * /api/picks (saved-search seed) — UI is paused but routes remain.
 
-For /api/retail (Claude vision retail-price lookup) set ANTHROPIC_API_KEY.
-For Andy's Picks (saved-search fan-out) edit DEFAULT_PICKS or POST a new
-list to /api/picks. Cold-start cost is ~3-4 sec per page of 12 saved
-searches; per-pick results cache for 5 minutes.
-
-The / route now wraps the inline shopgoodwill_feed.html with a tiny
-shim that exposes `state` on window plus a <script src="/picks.js">
-tag, so the picks UI lives in a separate file without touching the
-large HTML monolith.
+Deploy notes:
+  * Render free tier sleeps after 15 min idle. Set up cron-job.org (or
+    similar) hitting /api/snipe/tick?key=$SNIPE_TICK_SECRET every 60s
+    to keep the worker awake AND to fire scheduled snipes on time.
 """
 
 import html as html_module
 import json
 import os
 import re
+import threading
 import time
 import unicodedata
+import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,7 +35,7 @@ except Exception:  # pragma: no cover
     _PACIFIC = timezone.utc
 
 import requests
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
@@ -49,20 +50,16 @@ DATA_DIR.mkdir(exist_ok=True)
 FAVORITES_FILE = DATA_DIR / "favorites.json"
 BRANDS_FILE = DATA_DIR / "brands.json"
 PICKS_FILE = DATA_DIR / "picks.json"
+SNIPES_FILE = DATA_DIR / "snipes.json"
 FRONTEND_FILE = ROOT / "shopgoodwill_feed.html"
 PICKS_JS_FILE = ROOT / "picks.js"
+SNIPE_JS_FILE = ROOT / "snipe.js"
 MANIFEST_FILE = ROOT / "manifest.webmanifest"
 ICON_FILE = ROOT / "icon.svg"
 
 DEFAULT_BRANDS = [
-    "Coach",
-    "Madewell",
-    "Free People",
-    "Anthropologie",
-    "Patagonia",
-    "J.Crew",
-    "Eileen Fisher",
-    "Lululemon",
+    "Coach", "Madewell", "Free People", "Anthropologie",
+    "Patagonia", "J.Crew", "Eileen Fisher", "Lululemon",
 ]
 
 DEFAULT_PICKS: List[Dict[str, Any]] = [
@@ -127,6 +124,8 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or ""
 ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip()
 
+SNIPE_TICK_SECRET = (os.environ.get("SNIPE_TICK_SECRET") or "").strip()
+
 SORT_OPTIONS: Dict[str, tuple] = {
     "ending_soon":  ("1", "false"),
     "newly_listed": ("4", "true"),
@@ -139,9 +138,17 @@ _PICKS_CACHE: Dict[str, Dict[str, Any]] = {}
 _PICKS_TTL = 300
 
 _FRAME_INJECTION = (
-    "<script>(function(){try{window.state=state;"
-    "window.apiGet=apiGet;window.renderError=renderError;}catch(e){}})()</script>"
-    "<script src=\"/picks.js?v=3\"></script>"
+    "<script>(function(){try{"
+    "window.state=state;"
+    "window.apiGet=apiGet;"
+    "window.apiSend=apiSend;"
+    "window.renderError=renderError;"
+    "window.setBidNotice=setBidNotice;"
+    "window.openBidSheet=openBidSheet;"
+    "window.fmtPrice=fmtPrice;"
+    "}catch(e){}})()</script>"
+    "<script src=\"/picks.js?v=4\"></script>"
+    "<script src=\"/snipe.js?v=1\"></script>"
 )
 
 
@@ -176,12 +183,19 @@ class BidRequest(BaseModel):
     quantity: int = 1
 
 
+class SnipeRequest(BaseModel):
+    item_id: int
+    amount: float
+    end_time: str
+    lead_seconds: int = 8
+    title: Optional[str] = ""
+    image_url: Optional[str] = ""
+
+
 app = FastAPI(title="Goodwill Hunting")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
 
 
@@ -222,6 +236,10 @@ def _seconds_until(end_time_str: str) -> int:
     return max(0, int(delta))
 
 
+def _parse_iso(s: str) -> datetime:
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
 def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
     item_id = raw.get("itemId") or raw.get("id") or 0
     if not item_id:
@@ -238,9 +256,7 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
     seconds = _seconds_until(end_time)
     final_price = raw.get("finalPrice") or raw.get("closingPrice")
     is_closed = bool(
-        raw.get("isClosed")
-        or raw.get("closed")
-        or final_price is not None
+        raw.get("isClosed") or raw.get("closed") or final_price is not None
         or (end_time and seconds == 0)
     )
     current = raw.get("currentPrice")
@@ -463,7 +479,7 @@ def _strip_html(value):
     text = _BLOCK_TAGS_RE.sub("\n", value)
     text = _TAGS_RE.sub(" ", text)
     text = html_module.unescape(text)
-    text = text.replace(" ", " ").replace("\xa0", " ")
+    text = text.replace(" ", " ").replace("\xa0", " ")
     text = re.sub(r"[ \t]+", " ", text)
     return text
 
@@ -472,7 +488,7 @@ def _extract_notes(html_description):
     text = _strip_html(html_description)
     out, seen = [], set()
     for raw_line in re.split(r'[\n\r]+', text):
-        line = raw_line.strip(" \t-•* ")
+        line = raw_line.strip(" \t-•* ")
         if not line or len(line) > 140:
             continue
         m = _NOTE_LINE_RE.match(line)
@@ -726,12 +742,10 @@ def store_remove_favorite(item_id):
     return remaining
 
 
-# ---------- picks-specific filtering ----------
+# ---------- picks ----------
 
 _SIZE_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9\-/]*")
 _WORD_TOKEN_RE = re.compile(r"[a-z]{2,}")
-# Words from a pick's `query` that aren't useful for brand-prefix matching
-# (they're descriptive, not brand-identifying).
 _QUERY_STOPWORDS = {
     "the", "and", "for", "men", "mens", "women", "womens", "with",
     "size", "sized", "small", "medium", "large",
@@ -747,7 +761,7 @@ def _strip_diacritics(s: str) -> str:
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
 
-def _match_size_hints(title: str, hints: List[str]) -> bool:
+def _match_size_hints(title, hints):
     if not hints:
         return True
     title_lower = _strip_diacritics(title or "").lower()
@@ -764,18 +778,6 @@ def _match_size_hints(title: str, hints: List[str]) -> bool:
 
 
 def _pick_query_matches_title(query: str, title: str) -> bool:
-    """Filter substring/marketing false positives.
-
-    Two checks (both must pass):
-      1) Every 3+-char word from the pick's query must appear as a
-         standalone alpha token in the title. Kills "rab" matching
-         inside "Grab bag".
-      2) The first non-stopword 3+-char query word (the "brand word")
-         must appear in the first 6 alpha tokens of the title. Kills
-         "Marmot Men's Size XL Grey Heather Montane Crewneck" matching
-         the "montane" pick — Marmot uses "Montane" as a fabric name,
-         and real Montane listings put the brand at the front.
-    """
     if not query:
         return True
     title_norm = _strip_diacritics(title or "").lower()
@@ -785,10 +787,8 @@ def _pick_query_matches_title(query: str, title: str) -> bool:
     query_words = [w for w in _WORD_TOKEN_RE.findall(query_norm) if len(w) >= 3]
     if not query_words:
         return True
-    # All 3+-char query words must appear somewhere as a token.
     if not all(w in title_token_set for w in query_words):
         return False
-    # Brand-prefix: first non-stopword query word must appear in the first 6 tokens.
     brand_word = next((w for w in query_words if w not in _QUERY_STOPWORDS), query_words[0])
     return brand_word in title_tokens_all[:6]
 
@@ -807,18 +807,15 @@ def store_get_picks() -> List[dict]:
     return list(DEFAULT_PICKS)
 
 
-def store_set_picks(picks: List[dict]) -> List[dict]:
-    cleaned: List[dict] = []
+def store_set_picks(picks):
+    cleaned = []
     for p in picks or []:
         if not isinstance(p, dict):
             continue
         q = (p.get("query") or "").strip()
         if not q:
             continue
-        entry: Dict[str, Any] = {
-            "name": (p.get("name") or q).strip(),
-            "query": q,
-        }
+        entry = {"name": (p.get("name") or q).strip(), "query": q}
         pm = p.get("price_max")
         try:
             pm = float(pm) if pm is not None else 0
@@ -839,7 +836,7 @@ def store_set_picks(picks: List[dict]) -> List[dict]:
     return cleaned
 
 
-def _search_one_pick(pick: dict) -> List[FeedItem]:
+def _search_one_pick(pick):
     cache_key = json.dumps(pick, sort_keys=True)
     cached = _PICKS_CACHE.get(cache_key)
     if cached and time.time() - cached["t"] < _PICKS_TTL:
@@ -855,12 +852,10 @@ def _search_one_pick(pick: dict) -> List[FeedItem]:
             price_max=float(pick.get("price_max") or 0),
             no_pickup=True,
         )
-    except HTTPException:
-        return []
-    except Exception:
+    except (HTTPException, Exception):
         return []
     hints = pick.get("size_hints") or []
-    items: List[FeedItem] = []
+    items = []
     for raw in raw_items:
         try:
             normalized = _normalize_item(raw, label)
@@ -879,6 +874,93 @@ def _search_one_pick(pick: dict) -> List[FeedItem]:
             _PICKS_CACHE.pop(k, None)
     return items
 
+
+# ---------- snipes ----------
+
+_SNIPE_LOCK = threading.Lock()
+
+
+def _load_snipes() -> List[dict]:
+    if _supabase_enabled():
+        rows = _supabase("GET", "thrift_settings", params={"key": "eq.snipes", "select": "value"})
+        if rows and rows[0].get("value"):
+            value = rows[0]["value"]
+            if isinstance(value, list):
+                return value
+        return []
+    return _read_json(SNIPES_FILE, [])
+
+
+def _save_snipes(snipes: List[dict]):
+    if _supabase_enabled():
+        _supabase("POST", "thrift_settings",
+                  body={"key": "snipes", "value": snipes},
+                  prefer="return=minimal,resolution=merge-duplicates")
+    else:
+        _write_json(SNIPES_FILE, snipes)
+
+
+def _patch_snipe(snipe_id: str, **fields) -> Optional[dict]:
+    """Atomic-ish read-modify-write for a single snipe by id."""
+    with _SNIPE_LOCK:
+        snipes = _load_snipes()
+        for s in snipes:
+            if s.get("id") == snipe_id:
+                s.update(fields)
+                _save_snipes(snipes)
+                return dict(s)
+    return None
+
+
+def _prune_snipes(snipes: List[dict]) -> List[dict]:
+    terminal = {"fired", "failed", "cancelled"}
+    live, done = [], []
+    for s in snipes:
+        (done if s.get("status") in terminal else live).append(s)
+    done.sort(key=lambda s: s.get("created_at", ""), reverse=True)
+    return live + done[:50]
+
+
+def _check_snipe_key(key: str) -> bool:
+    if not SNIPE_TICK_SECRET:
+        return False
+    return (key or "").strip() == SNIPE_TICK_SECRET
+
+
+def _execute_snipe(snipe_id: str):
+    """Sleep until exact fire_at, then place the bid. Runs in a daemon thread."""
+    snipes = _load_snipes()
+    snipe = next((s for s in snipes if s.get("id") == snipe_id), None)
+    if not snipe:
+        return
+    try:
+        fire_at = _parse_iso(snipe["fire_at"])
+        delta = (fire_at - datetime.now(timezone.utc)).total_seconds()
+        # Cap at 5 minutes to protect against absurd schedules.
+        if delta > 0:
+            time.sleep(min(delta, 300))
+        result = _place_bid(int(snipe["item_id"]), float(snipe["amount"]), 1)
+        _patch_snipe(
+            snipe_id,
+            status="fired",
+            fired_at=datetime.now(timezone.utc).isoformat(),
+            result=json.dumps(result)[:400],
+        )
+    except HTTPException as exc:
+        _patch_snipe(
+            snipe_id, status="failed",
+            fired_at=datetime.now(timezone.utc).isoformat(),
+            result=f"{exc.status_code}: {exc.detail}"[:400],
+        )
+    except Exception as exc:
+        _patch_snipe(
+            snipe_id, status="failed",
+            fired_at=datetime.now(timezone.utc).isoformat(),
+            result=f"{type(exc).__name__}: {exc}"[:400],
+        )
+
+
+# ---------- routes ----------
 
 @app.get("/api/feed", response_model=List[FeedItem])
 def get_feed(
@@ -907,7 +989,7 @@ def get_feed(
         buy_now_only=buy_now_only, no_pickup=no_pickup,
         include_closed=include_closed, closed_days_back=closed_days_back,
     )
-    items: List[FeedItem] = []
+    items = []
     label = brand or q
     for raw in raw_items:
         try:
@@ -963,6 +1045,112 @@ def api_place_bid(req: BidRequest):
     return {"ok": True, "result": _place_bid(req.item_id, req.amount, req.quantity)}
 
 
+# ----- snipe endpoints -----
+
+@app.post("/api/snipes")
+def schedule_snipe(req: SnipeRequest):
+    if req.amount <= 0:
+        raise HTTPException(400, "amount must be positive")
+    try:
+        end_dt = _parse_iso(req.end_time)
+    except Exception:
+        raise HTTPException(400, f"invalid end_time: {req.end_time!r}")
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=_PACIFIC)
+    end_utc = end_dt.astimezone(timezone.utc)
+    lead = max(2, min(60, int(req.lead_seconds)))
+    fire_at = end_utc - timedelta(seconds=lead)
+    now_utc = datetime.now(timezone.utc)
+    if fire_at <= now_utc + timedelta(seconds=2):
+        raise HTTPException(400, "auction is too close to its end to schedule a snipe")
+
+    snipe = {
+        "id": "snipe_" + uuid.uuid4().hex[:12],
+        "item_id": int(req.item_id),
+        "amount": round(float(req.amount), 2),
+        "fire_at": fire_at.isoformat(),
+        "end_time": end_utc.isoformat(),
+        "lead_seconds": lead,
+        "title": (req.title or "")[:200],
+        "image_url": (req.image_url or "")[:400],
+        "status": "scheduled",
+        "result": "",
+        "created_at": now_utc.isoformat(),
+        "fired_at": None,
+    }
+    with _SNIPE_LOCK:
+        snipes = _load_snipes()
+        snipes.append(snipe)
+        snipes = _prune_snipes(snipes)
+        _save_snipes(snipes)
+    return snipe
+
+
+@app.get("/api/snipes")
+def list_snipes(status: str = Query("")):
+    snipes = _load_snipes()
+    if status:
+        snipes = [s for s in snipes if s.get("status") == status]
+    snipes.sort(key=lambda s: s.get("fire_at", ""), reverse=True)
+    return snipes
+
+
+@app.delete("/api/snipes/{snipe_id}")
+def cancel_snipe(snipe_id: str):
+    with _SNIPE_LOCK:
+        snipes = _load_snipes()
+        for s in snipes:
+            if s.get("id") == snipe_id:
+                cur = s.get("status")
+                if cur != "scheduled":
+                    raise HTTPException(409, f"cannot cancel snipe in status {cur!r}")
+                s["status"] = "cancelled"
+                s["result"] = "cancelled by user"
+                s["fired_at"] = datetime.now(timezone.utc).isoformat()
+                _save_snipes(snipes)
+                return s
+    raise HTTPException(404, "snipe not found")
+
+
+@app.api_route("/api/snipe/tick", methods=["GET", "POST"])
+def snipe_tick(request: Request, key: str = Query(default="")):
+    """Cron-driven worker wake-up. Pings the worker (keeping Render free
+    tier awake) and spawns daemon threads for any snipes whose fire_at is
+    within the next 90 seconds."""
+    header_key = (request.headers.get("x-snipe-key") or "").strip()
+    if not _check_snipe_key(key or header_key):
+        raise HTTPException(403, "invalid or missing snipe key")
+    now = datetime.now(timezone.utc)
+    horizon = now + timedelta(seconds=90)
+    backstop = now - timedelta(seconds=30)
+    spawned = []
+    with _SNIPE_LOCK:
+        snipes = _load_snipes()
+        for s in snipes:
+            if s.get("status") != "scheduled":
+                continue
+            try:
+                fire_at = _parse_iso(s["fire_at"])
+            except Exception:
+                continue
+            if fire_at <= horizon and fire_at >= backstop:
+                s["status"] = "in_flight"
+                spawned.append(s["id"])
+        if spawned:
+            _save_snipes(snipes)
+    for sid in spawned:
+        threading.Thread(target=_execute_snipe, args=(sid,), daemon=True).start()
+    pending = sum(1 for s in snipes if s.get("status") == "scheduled")
+    return {
+        "ok": True,
+        "now": now.isoformat(),
+        "horizon": horizon.isoformat(),
+        "spawned": spawned,
+        "pending": pending,
+        "total": len(snipes),
+    }
+
+
 @app.get("/api/debug/upstream")
 def debug_upstream(brand: str = "Coach", page: int = 1, page_size: int = 5):
     try:
@@ -1007,7 +1195,7 @@ def picks_feed(page: int = Query(1, ge=1), picks_per_page: int = Query(12, ge=1,
     chunk = picks[start:end]
     if not chunk:
         return []
-    all_items: List[FeedItem] = []
+    all_items = []
     with ThreadPoolExecutor(max_workers=4) as pool:
         for batch in pool.map(_search_one_pick, chunk):
             all_items.extend(batch)
@@ -1041,6 +1229,7 @@ def remove_favorite(item_id: int):
 
 @app.get("/api/health")
 def health():
+    snipes = _load_snipes() if (_supabase_enabled() or SNIPES_FILE.exists()) else []
     return {
         "ok": True,
         "storage": "supabase" if _supabase_enabled() else "file",
@@ -1048,6 +1237,9 @@ def health():
         "retail_lookup": bool(ANTHROPIC_API_KEY),
         "retail_model": ANTHROPIC_MODEL if ANTHROPIC_API_KEY else None,
         "picks": len(store_get_picks()),
+        "snipe_tick_configured": bool(SNIPE_TICK_SECRET),
+        "snipes_pending": sum(1 for s in snipes if s.get("status") == "scheduled"),
+        "snipes_total": len(snipes),
     }
 
 
@@ -1058,12 +1250,19 @@ def serve_picks_js():
     raise HTTPException(status_code=404)
 
 
+@app.get("/snipe.js")
+def serve_snipe_js():
+    if SNIPE_JS_FILE.exists():
+        return FileResponse(str(SNIPE_JS_FILE), media_type="application/javascript")
+    raise HTTPException(status_code=404)
+
+
 @app.get("/", response_class=HTMLResponse)
 def serve_frontend():
     if not FRONTEND_FILE.exists():
         raise HTTPException(status_code=404, detail="shopgoodwill_feed.html not found")
     html = FRONTEND_FILE.read_text()
-    if PICKS_JS_FILE.exists() and "/picks.js" not in html:
+    if "/picks.js" not in html:
         html = html.replace("</body>", _FRAME_INJECTION + "</body>", 1)
     return HTMLResponse(html, media_type="text/html")
 
