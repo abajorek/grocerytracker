@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product Finder — good / better / best, no hoopla</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Product Finder</h1>
+      <p>Real opinions from Reddit, forums &amp; trusted review sites — ranked good · better · best, minus the hype.</p>
+    </div>
+
+    <div class="main-content">
+      <form class="searchbar" action="{{ url_for('search') }}" method="post">
+        <input type="text" name="query" placeholder="e.g. best heavy-duty extension cord"
+               value="{{ query|default('') }}" autofocus>
+        <button type="submit" name="mock" value="0">Search</button>
+        <button type="submit" name="mock" value="1" class="ghost" title="No API keys needed — uses bundled sample data to demo the layout">Try demo</button>
+      </form>
+
+      <div class="status">
+        Reddit API:
+        <span class="{{ 'ok' if reddit_ok else 'off' }}">{{ 'connected' if reddit_ok else 'not configured' }}</span>
+        &nbsp;·&nbsp; Claude:
+        <span class="{{ 'ok' if claude_ok else 'off' }}">{{ 'connected' if claude_ok else 'not configured' }}</span>
+      </div>
+
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+
+      {% if result %}
+        {% if result.mock %}<div class="mock-banner">DEMO MODE — sample data, not a live search.</div>{% endif %}
+
+        <div class="section summary">
+          <h2>Bottom line</h2>
+          <p>{{ result.summary }}</p>
+        </div>
+
+        <div class="tiers">
+          {% for t in result.tiers %}
+            <div class="tier tier-{{ t.tier }}">
+              <div class="tier-label">{{ t.tier }}</div>
+              <h3>{{ t.product }}{% if t.approx_price %} <span class="price">~{{ t.approx_price }}</span>{% endif %}</h3>
+              <p class="why">{{ t.why }}</p>
+              <p class="consensus">📊 {{ t.consensus }}</p>
+              {% for q in t.quotes %}
+                <blockquote>“{{ q.text }}”
+                  <a href="{{ q.url }}" target="_blank" rel="noopener">source ↗</a>
+                </blockquote>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+
+        {% if result.caveats %}
+          <div class="section caveats"><h2>Caveats</h2><p>{{ result.caveats }}</p></div>
+        {% endif %}
+
+        <details class="evidence">
+          <summary>Raw evidence ({{ result.snippets|length }} snippets)</summary>
+          {% for s in result.snippets %}
+            <div class="snippet">
+              <div class="snippet-meta">
+                <span class="badge badge-{{ s.source_type }}">{{ s.source_type }}</span>
+                <span>{{ s.origin }}</span>
+                {% if s.score %}<span>▲ {{ s.score }}</span>{% endif %}
+                <a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.title }}</a>
+              </div>
+              <p>{{ s.text }}</p>
+            </div>
+          {% endfor %}
+        </details>
+
+        <div class="footer">Sources searched: {{ result.sources_searched|join(' · ') }}</div>
+      {% else %}
+        <div class="placeholder">
+          <p>Edit <code>sources.yaml</code> to choose which subreddits and review sites to trust.
+             No keys yet? Hit <strong>Try demo</strong> to see the layout with sample data.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

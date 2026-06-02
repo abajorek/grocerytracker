@@ -1,0 +1,50 @@
+[
+  {
+    "source_type": "reddit",
+    "title": "Best heavy-duty extension cord for a garage?",
+    "url": "https://www.reddit.com/r/Tools/comments/example1",
+    "text": "For anything in a garage or outdoors I just buy a 12-gauge (12 AWG) cord and never look back. The US Wire & Cable 100ft 12/3 has been bulletproof for me for 6 years of running a compressor and table saw.",
+    "score": 412,
+    "origin": "r/Tools"
+  },
+  {
+    "source_type": "reddit",
+    "title": "comment on: Best heavy-duty extension cord for a garage?",
+    "url": "https://www.reddit.com/r/Tools/comments/example1",
+    "text": "Gauge matters more than brand. 16ga is fine for a lamp, but for power tools get 12ga. Cheap thin cords from big-box stores overheat. The Iron Forge 12/3 is a great budget option if you don't need 100ft.",
+    "score": 287,
+    "origin": "r/Tools"
+  },
+  {
+    "source_type": "reddit",
+    "title": "BIFL extension cords?",
+    "url": "https://www.reddit.com/r/BuyItForLife/comments/example2",
+    "text": "Southwire is the brand electricians I know actually trust. The Southwire 2588 12/3 lasts forever. Avoid no-name Amazon cords, the copper is often undersized vs the label.",
+    "score": 153,
+    "origin": "r/BuyItForLife"
+  },
+  {
+    "source_type": "review",
+    "title": "The Best Extension Cords for Around the House and Yard",
+    "url": "https://www.rtings.com/example/best-extension-cords",
+    "text": "After testing for voltage drop under load, our top pick for heavy use is a 12-gauge cord; the US Wire & Cable model held voltage best at 100ft. For light indoor use a 16-gauge is adequate and far cheaper.",
+    "score": 0,
+    "origin": "rtings.com"
+  },
+  {
+    "source_type": "review",
+    "title": "Best Extension Cords of 2026, Tested",
+    "url": "https://www.outdoorgearlab.com/example/extension-cords",
+    "text": "The Iron Forge Cable 12/3 earned our Best Buy award: nearly the performance of premium cords at a lower price. Premium pick remains Southwire for durability in cold weather.",
+    "score": 0,
+    "origin": "outdoorgearlab.com"
+  },
+  {
+    "source_type": "web",
+    "title": "Extension cord gauge explained",
+    "url": "https://example-forum.com/thread/gauge",
+    "text": "Rule of thumb: shorter + thicker = less voltage drop. For 100ft of power tools use 10 or 12 AWG. 14-16 AWG only for short runs of low-draw devices.",
+    "score": 0,
+    "origin": "web"
+  }
+]

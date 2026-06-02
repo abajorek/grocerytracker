@@ -1,0 +1,38 @@
+# Edit this file to choose which "boards of opinion" the tool trusts.
+# No code changes needed — just add/remove entries.
+
+# Subreddits to search (without the "r/"). Good starting points for gear:
+subreddits:
+  - BuyItForLife
+  - Tools
+  - HomeImprovement
+  # - headphones
+  # - hometheater
+  # - onebag
+
+# Trusted review-site domains. Searched with `your query site:domain`.
+# Paywalled sites (e.g. consumerreports.org) return public snippets only.
+review_sites:
+  - rtings.com
+  - outdoorgearlab.com
+  - nytimes.com/wirecutter
+  - consumerreports.org
+
+# Also search the open web / forums beyond the trusted list above?
+enable_general_web: true
+
+synthesis:
+  # "claude-sonnet-4-6" = fast + cheap + great. Use "claude-opus-4-8" for the
+  # deepest analysis on hard questions.
+  model: claude-sonnet-4-6
+  max_snippets: 40        # cap on evidence sent to Claude (controls cost)
+
+retrieval:
+  reddit_posts_per_sub: 4
+  reddit_comments_per_post: 6
+  web_results_per_site: 3
+  general_web_results: 6
+  fetch_full_text: true   # pull article body when robots.txt allows
+  max_chars_per_snippet: 1500
+  request_timeout: 10
+  user_agent: "product-finder/0.1 (personal research)"

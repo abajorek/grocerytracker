@@ -1,0 +1,98 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+  color: #2c3e50;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+
+.header {
+  background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+  color: #fff;
+  padding: 30px;
+  text-align: center;
+}
+.header h1 { font-size: 2.4em; margin-bottom: 8px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+.header p { opacity: 0.92; font-size: 1.05em; }
+
+.main-content { padding: 32px 40px 40px; }
+
+.searchbar { display: flex; gap: 10px; flex-wrap: wrap; }
+.searchbar input {
+  flex: 1 1 320px; padding: 14px 16px; font-size: 1.05em;
+  border: 2px solid #d7dbe0; border-radius: 12px;
+}
+.searchbar input:focus { outline: none; border-color: #3498db; }
+.searchbar button {
+  padding: 14px 22px; font-size: 1em; font-weight: 600; color: #fff;
+  background: #3498db; border: none; border-radius: 12px; cursor: pointer;
+}
+.searchbar button:hover { background: #2c80b4; }
+.searchbar button.ghost { background: #eef1f5; color: #2c3e50; }
+.searchbar button.ghost:hover { background: #e1e6ec; }
+
+.status { margin: 14px 2px 0; font-size: 0.88em; color: #6b7280; }
+.status .ok { color: #1f9d55; font-weight: 600; }
+.status .off { color: #b45309; font-weight: 600; }
+
+.error { margin-top: 20px; padding: 16px; border-radius: 12px;
+  background: #fdecea; color: #b71c1c; border-left: 5px solid #e74c3c; }
+
+.mock-banner { margin-top: 20px; padding: 10px 16px; border-radius: 10px;
+  background: #fff7e6; color: #92600a; border-left: 5px solid #f39c12; font-weight: 600; }
+
+.placeholder { margin-top: 26px; color: #6b7280; }
+.placeholder code { background: #eef1f5; padding: 2px 6px; border-radius: 5px; }
+
+.section { margin-top: 26px; background: #f8f9fa; border-radius: 15px;
+  padding: 24px; border-left: 5px solid #3498db; }
+.section h2 { font-size: 1.15em; margin-bottom: 8px; color: #2c3e50; }
+.section.caveats { border-left-color: #f39c12; }
+
+.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px; margin-top: 26px; }
+.tier { border-radius: 15px; padding: 22px; background: #fff;
+  border: 1px solid #e6e9ee; box-shadow: 0 6px 16px rgba(0,0,0,0.06); }
+.tier-label { text-transform: uppercase; letter-spacing: 1px; font-size: 0.78em;
+  font-weight: 700; color: #fff; display: inline-block; padding: 4px 12px;
+  border-radius: 999px; margin-bottom: 10px; }
+.tier-good   { border-top: 5px solid #95a5a6; }
+.tier-better { border-top: 5px solid #3498db; }
+.tier-best   { border-top: 5px solid #1f9d55; }
+.tier-good   .tier-label { background: #95a5a6; }
+.tier-better .tier-label { background: #3498db; }
+.tier-best   .tier-label { background: #1f9d55; }
+.tier h3 { font-size: 1.15em; margin-bottom: 6px; }
+.tier .price { font-size: 0.8em; color: #6b7280; font-weight: 500; }
+.tier .why { margin-bottom: 8px; }
+.tier .consensus { font-size: 0.85em; color: #4b5563; margin-bottom: 10px; }
+.tier blockquote { font-size: 0.9em; color: #374151; background: #f8f9fa;
+  border-left: 3px solid #d7dbe0; padding: 8px 12px; border-radius: 8px;
+  margin-top: 8px; }
+.tier blockquote a { font-size: 0.85em; color: #3498db; text-decoration: none; }
+
+.evidence { margin-top: 26px; }
+.evidence summary { cursor: pointer; font-weight: 600; color: #2c3e50; padding: 8px 0; }
+.snippet { padding: 14px 0; border-bottom: 1px solid #eef1f5; }
+.snippet-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  font-size: 0.82em; color: #6b7280; margin-bottom: 6px; }
+.snippet-meta a { color: #3498db; text-decoration: none; }
+.snippet p { font-size: 0.92em; color: #374151; }
+.badge { padding: 2px 9px; border-radius: 999px; color: #fff; font-size: 0.78em; }
+.badge-reddit { background: #ff4500; }
+.badge-review { background: #1f9d55; }
+.badge-web    { background: #6b7280; }
+
+.footer { margin-top: 26px; padding-top: 16px; border-top: 1px solid #eef1f5;
+  font-size: 0.82em; color: #9ca3af; }

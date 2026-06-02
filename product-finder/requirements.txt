@@ -1,0 +1,7 @@
+flask>=3.0
+praw>=7.7
+anthropic>=0.40
+ddgs>=6.0
+trafilatura>=1.8
+python-dotenv>=1.0
+pyyaml>=6.0
