@@ -54,6 +54,11 @@ EMIT_TOOL = {
                         "why": {"type": "string"},
                         "consensus": {"type": "string"},
                         "approx_price": {"type": "string"},
+                        "image_url": {
+                            "type": "string",
+                            "description": "Optional direct product image URL ONLY if "
+                                           "one clearly appears in the evidence; else omit.",
+                        },
                         "quotes": {
                             "type": "array",
                             "items": {
@@ -130,6 +135,7 @@ def _build(query, data, snippets, mock):
             why=t.get("why", ""),
             consensus=t.get("consensus", ""),
             approx_price=t.get("approx_price", ""),
+            image_url=t.get("image_url", ""),
             quotes=[Quote(q.get("text", ""), q.get("url", ""))
                     for q in t.get("quotes", [])],
         ))

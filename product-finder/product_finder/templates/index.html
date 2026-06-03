@@ -47,6 +47,21 @@
         <div class="tiers">
           {% for t in result.tiers %}
             <div class="tier tier-{{ t.tier }}">
+              <div class="tier-media">
+                {% if t.image_url %}
+                  <img src="{{ t.image_url }}" alt="{{ t.product }}">
+                {% else %}
+                  <svg class="art" viewBox="0 0 220 150" aria-hidden="true">
+                    <rect x="26" y="58" width="38" height="34" rx="7"/>
+                    <line x1="12" y1="68" x2="26" y2="68"/>
+                    <line x1="12" y1="82" x2="26" y2="82"/>
+                    <path d="M64 75 C 108 75, 92 122, 128 116 S 168 64, 196 78" fill="none"/>
+                    <rect x="150" y="52" width="34" height="40" rx="7"/>
+                    <circle cx="167" cy="64" r="2.6"/>
+                    <circle cx="167" cy="80" r="2.6"/>
+                  </svg>
+                {% endif %}
+              </div>
               <div class="tier-label">{{ t.tier }}</div>
               <h3>{{ t.product }}{% if t.approx_price %} <span class="price">~{{ t.approx_price }}</span>{% endif %}</h3>
               <p class="why">{{ t.why }}</p>

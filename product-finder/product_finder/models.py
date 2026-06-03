@@ -45,6 +45,7 @@ class Tier:
     consensus: str            # e.g. "strong — 5 independent sources agree"
     quotes: List[Quote] = field(default_factory=list)
     approx_price: str = ""
+    image_url: str = ""       # optional real product photo (else card shows line-art)
 
 
 @dataclass
