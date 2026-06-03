@@ -4,113 +4,263 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Product Finder — good / better / best, no hoopla</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
   <style>
+/* Product Finder — editorial-luxury theme inspired by Gucci Beauty.
+   Warm ivory ground, high-contrast serif type, oxblood / bottle-green / antique
+   gold jewel tones, hairline gold rules, and a lot of quiet space. */
+
+:root {
+  --cream:        #F4EEE2;   /* page ground */
+  --cream-panel:  #FBF7EF;   /* cards / raised surfaces */
+  --ink:          #2A231C;   /* primary text */
+  --muted:        #6E6356;   /* secondary text */
+  --oxblood:      #7C1D1D;   /* signature deep red */
+  --green:        #213A2C;   /* bottle green */
+  --gold:         #A9803F;   /* antique gold */
+  --gold-soft:    #C7A36A;
+  --line:         rgba(169,128,63,0.40);  /* gold hairline */
+  --line-soft:    rgba(42,35,28,0.10);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  background: var(--cream);
+  color: var(--ink);
   min-height: 100vh;
-  padding: 20px;
-  color: #2c3e50;
+  padding: 40px 20px;
+  font-size: 18px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 .container {
-  max-width: 1100px;
+  max-width: 1040px;
   margin: 0 auto;
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 2px;
   overflow: hidden;
 }
 
+/* ---- Header ---------------------------------------------------------- */
 .header {
-  background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
-  color: #fff;
-  padding: 30px;
+  text-align: center;
+  padding: 64px 30px 40px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.eyebrow {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase;
+  letter-spacing: 0.42em;
+  font-size: 0.72rem;
+  color: var(--gold);
+  margin-bottom: 18px;
+  padding-left: 0.42em; /* optical balance for tracking */
+}
+.header h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  font-size: 4.2rem;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+.header p {
+  margin-top: 16px;
+  font-size: 1.12rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.header p em { color: var(--oxblood); font-style: italic; }
+
+.main-content { padding: 44px 56px 56px; }
+
+/* ---- Search ---------------------------------------------------------- */
+.searchbar { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+.searchbar input {
+  flex: 1 1 320px;
+  padding: 16px 4px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.5rem;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--ink);
+}
+.searchbar input::placeholder { color: #b3a899; font-style: italic; }
+.searchbar input:focus { outline: none; border-bottom-color: var(--oxblood); }
+
+.searchbar button {
+  padding: 12px 26px;
+  font-family: 'EB Garamond', serif;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--cream);
+  background: var(--oxblood);
+  border: 1px solid var(--oxblood);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.searchbar button:hover { background: #5f1414; }
+.searchbar button.ghost { background: transparent; color: var(--ink); border-color: var(--ink); }
+.searchbar button.ghost:hover { background: var(--ink); color: var(--cream); }
+
+.status {
+  margin: 22px 2px 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+.status .ok  { color: var(--green);   font-weight: 500; }
+.status .off { color: var(--gold);    font-weight: 500; }
+
+/* ---- Banners --------------------------------------------------------- */
+.error {
+  margin-top: 26px; padding: 18px 22px; border-radius: 2px;
+  background: #f7ebe7; color: var(--oxblood);
+  border: 1px solid rgba(124,29,29,0.3); border-left: 3px solid var(--oxblood);
+  font-style: italic;
+}
+.mock-banner {
+  margin-top: 26px; padding: 12px 22px; border-radius: 2px;
+  background: transparent; color: var(--gold);
+  border: 1px solid var(--line);
+  text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.72rem;
   text-align: center;
 }
-.header h1 { font-size: 2.4em; margin-bottom: 8px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
-.header p { opacity: 0.92; font-size: 1.05em; }
-
-.main-content { padding: 32px 40px 40px; }
-
-.searchbar { display: flex; gap: 10px; flex-wrap: wrap; }
-.searchbar input {
-  flex: 1 1 320px; padding: 14px 16px; font-size: 1.05em;
-  border: 2px solid #d7dbe0; border-radius: 12px;
+.placeholder { margin-top: 34px; color: var(--muted); font-size: 1.05rem; }
+.placeholder code {
+  font-family: 'EB Garamond', serif; font-style: italic;
+  color: var(--oxblood); background: var(--cream-panel);
+  padding: 1px 7px; border: 1px solid var(--line); border-radius: 2px;
 }
-.searchbar input:focus { outline: none; border-color: #3498db; }
-.searchbar button {
-  padding: 14px 22px; font-size: 1em; font-weight: 600; color: #fff;
-  background: #3498db; border: none; border-radius: 12px; cursor: pointer;
+
+/* ---- Sections -------------------------------------------------------- */
+.section { margin-top: 40px; }
+.section h2 {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.24em;
+  font-size: 0.78rem; color: var(--gold);
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
 }
-.searchbar button:hover { background: #2c80b4; }
-.searchbar button.ghost { background: #eef1f5; color: #2c3e50; }
-.searchbar button.ghost:hover { background: #e1e6ec; }
+.section.summary p { font-family: 'Cormorant Garamond', serif; font-size: 1.55rem;
+  line-height: 1.45; color: var(--ink); }
+.section.caveats p { font-style: italic; color: var(--muted); }
 
-.status { margin: 14px 2px 0; font-size: 0.88em; color: #6b7280; }
-.status .ok { color: #1f9d55; font-weight: 600; }
-.status .off { color: #b45309; font-weight: 600; }
+/* ---- Tiers ----------------------------------------------------------- */
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-top: 44px;
+}
+.tier {
+  background: var(--cream-panel);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--gold);
+  border-radius: 2px;
+  padding: 30px 28px;
+  position: relative;
+}
+.tier-better { border-top-color: var(--green); }
+.tier-best   { border-top-color: var(--oxblood); }
 
-.error { margin-top: 20px; padding: 16px; border-radius: 12px;
-  background: #fdecea; color: #b71c1c; border-left: 5px solid #e74c3c; }
+.tier-label {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.3em;
+  font-size: 0.68rem; color: var(--gold);
+  display: block; margin-bottom: 14px;
+}
+.tier-better .tier-label { color: var(--green); }
+.tier-best   .tier-label { color: var(--oxblood); }
 
-.mock-banner { margin-top: 20px; padding: 10px 16px; border-radius: 10px;
-  background: #fff7e6; color: #92600a; border-left: 5px solid #f39c12; font-weight: 600; }
+.tier h3 {
+  font-family: 'Cormorant Garamond', serif; font-weight: 500;
+  font-size: 1.85rem; line-height: 1.15; color: var(--ink); margin-bottom: 10px;
+}
+.tier .price { font-size: 0.95rem; color: var(--muted); font-style: italic; }
+.tier .why { margin-bottom: 12px; color: var(--ink); }
+.tier .consensus {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted); margin-bottom: 16px;
+}
+.tier blockquote {
+  font-family: 'Cormorant Garamond', serif; font-style: italic;
+  font-size: 1.18rem; line-height: 1.45; color: var(--ink);
+  border-left: 2px solid var(--gold-soft);
+  padding: 4px 0 4px 18px; margin-top: 14px;
+}
+.tier blockquote a {
+  display: block; margin-top: 8px;
+  font-family: 'EB Garamond', serif; font-style: normal;
+  text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.66rem;
+  color: var(--oxblood); text-decoration: none;
+}
+.tier blockquote a:hover { color: var(--gold); }
 
-.placeholder { margin-top: 26px; color: #6b7280; }
-.placeholder code { background: #eef1f5; padding: 2px 6px; border-radius: 5px; }
+/* ---- Evidence -------------------------------------------------------- */
+.evidence { margin-top: 44px; border-top: 1px solid var(--line); padding-top: 8px; }
+.evidence summary {
+  cursor: pointer; list-style: none;
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.76rem;
+  color: var(--gold); padding: 14px 0;
+}
+.evidence summary::-webkit-details-marker { display: none; }
+.evidence summary::before { content: '+ '; }
+.evidence[open] summary::before { content: '— '; }
 
-.section { margin-top: 26px; background: #f8f9fa; border-radius: 15px;
-  padding: 24px; border-left: 5px solid #3498db; }
-.section h2 { font-size: 1.15em; margin-bottom: 8px; color: #2c3e50; }
-.section.caveats { border-left-color: #f39c12; }
+.snippet { padding: 18px 0; border-bottom: 1px solid var(--line-soft); }
+.snippet-meta {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted); margin-bottom: 8px;
+}
+.snippet-meta a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+.snippet p { font-size: 1.02rem; color: var(--ink); }
+.badge {
+  padding: 3px 11px; border-radius: 2px; font-size: 0.62rem;
+  letter-spacing: 0.14em; border: 1px solid currentColor;
+}
+.badge-reddit { color: var(--oxblood); }
+.badge-review { color: var(--green); }
+.badge-web    { color: var(--gold); }
 
-.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 18px; margin-top: 26px; }
-.tier { border-radius: 15px; padding: 22px; background: #fff;
-  border: 1px solid #e6e9ee; box-shadow: 0 6px 16px rgba(0,0,0,0.06); }
-.tier-label { text-transform: uppercase; letter-spacing: 1px; font-size: 0.78em;
-  font-weight: 700; color: #fff; display: inline-block; padding: 4px 12px;
-  border-radius: 999px; margin-bottom: 10px; }
-.tier-good   { border-top: 5px solid #95a5a6; }
-.tier-better { border-top: 5px solid #3498db; }
-.tier-best   { border-top: 5px solid #1f9d55; }
-.tier-good   .tier-label { background: #95a5a6; }
-.tier-better .tier-label { background: #3498db; }
-.tier-best   .tier-label { background: #1f9d55; }
-.tier h3 { font-size: 1.15em; margin-bottom: 6px; }
-.tier .price { font-size: 0.8em; color: #6b7280; font-weight: 500; }
-.tier .why { margin-bottom: 8px; }
-.tier .consensus { font-size: 0.85em; color: #4b5563; margin-bottom: 10px; }
-.tier blockquote { font-size: 0.9em; color: #374151; background: #f8f9fa;
-  border-left: 3px solid #d7dbe0; padding: 8px 12px; border-radius: 8px;
-  margin-top: 8px; }
-.tier blockquote a { font-size: 0.85em; color: #3498db; text-decoration: none; }
+/* ---- Footer ---------------------------------------------------------- */
+.footer {
+  margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line);
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.16em;
+  color: var(--muted);
+}
 
-.evidence { margin-top: 26px; }
-.evidence summary { cursor: pointer; font-weight: 600; color: #2c3e50; padding: 8px 0; }
-.snippet { padding: 14px 0; border-bottom: 1px solid #eef1f5; }
-.snippet-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-  font-size: 0.82em; color: #6b7280; margin-bottom: 6px; }
-.snippet-meta a { color: #3498db; text-decoration: none; }
-.snippet p { font-size: 0.92em; color: #374151; }
-.badge { padding: 2px 9px; border-radius: 999px; color: #fff; font-size: 0.78em; }
-.badge-reddit { background: #ff4500; }
-.badge-review { background: #1f9d55; }
-.badge-web    { background: #6b7280; }
-
-.footer { margin-top: 26px; padding-top: 16px; border-top: 1px solid #eef1f5;
-  font-size: 0.82em; color: #9ca3af; }
+/* ---- Responsive ------------------------------------------------------ */
+@media (max-width: 600px) {
+  body { padding: 16px 8px; font-size: 17px; }
+  .header { padding: 44px 20px 30px; }
+  .header h1 { font-size: 2.9rem; }
+  .eyebrow { letter-spacing: 0.32em; }
+  .main-content { padding: 30px 22px 36px; }
+  .searchbar input { font-size: 1.3rem; }
+}
 
 </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
+      <div class="eyebrow">Curated &middot; Unbiased</div>
       <h1>Product Finder</h1>
-      <p>Real opinions from Reddit, forums &amp; trusted review sites — ranked good · better · best, minus the hype.</p>
+      <p>Real opinions from Reddit, forums &amp; trusted review sites — the considered <em>good</em>, <em>better</em> &amp; <em>best</em>.</p>
     </div>
 
     <div class="main-content">
@@ -131,11 +281,11 @@ body {
       
 
       
-        <div class="mock-banner">PREVIEW — sample data showing the layout. A real search pulls live quotes from your chosen sources.</div>
+        <div class="mock-banner">Preview — sample data showing the layout. A real search pulls live quotes from your chosen sources.</div>
 
         <div class="section summary">
           <h2>Bottom line</h2>
-          <p>For garage/outdoor and power-tool use the consensus is clear: get a 12-gauge (12 AWG) cord and match length to your needs. Gauge matters more than brand; avoid thin no-name big-box/Amazon cords that overheat.</p>
+          <p>For garage, outdoor and power-tool use the consensus is clear: choose a 12-gauge (12 AWG) cord and match length to your needs. Gauge matters more than brand; avoid thin no-name cords that overheat under load.</p>
         </div>
 
         <div class="tiers">
@@ -143,8 +293,8 @@ body {
             <div class="tier tier-good">
               <div class="tier-label">good</div>
               <h3>Iron Forge Cable 12/3 <span class="price">~$30</span></h3>
-              <p class="why">Near-premium performance for noticeably less money; great if you don't need 100ft.</p>
-              <p class="consensus">📊 strong — review site Best Buy pick + multiple Reddit mentions</p>
+              <p class="why">Near-premium performance for noticeably less; ideal if you don't need 100ft.</p>
+              <p class="consensus">📊 strong — review-site Best Buy pick + multiple Reddit mentions</p>
               
                 <blockquote>“The Iron Forge Cable 12/3 earned our Best Buy award: nearly the performance of premium cords at a lower price.”
                   <a href="https://www.outdoorgearlab.com/example/extension-cords" target="_blank" rel="noopener">source ↗</a>
@@ -155,8 +305,8 @@ body {
             <div class="tier tier-better">
               <div class="tier-label">better</div>
               <h3>US Wire & Cable 12/3 (100ft) <span class="price">~$70</span></h3>
-              <p class="why">Held voltage best at 100ft under load in testing; long-haul workhorse.</p>
-              <p class="consensus">📊 strong — top tested pick + 6-year owner report</p>
+              <p class="why">Held voltage best at 100ft under load in testing; a long-haul workhorse.</p>
+              <p class="consensus">📊 strong — top tested pick + multi-year owner reports</p>
               
                 <blockquote>“Our top pick for heavy use is a 12-gauge cord; the US Wire & Cable model held voltage best at 100ft.”
                   <a href="https://www.rtings.com/example/best-extension-cords" target="_blank" rel="noopener">source ↗</a>
@@ -168,7 +318,7 @@ body {
               <div class="tier-label">best</div>
               <h3>Southwire 2588 12/3 <span class="price">~$55</span></h3>
               <p class="why">The brand electricians trust; durable in cold weather and built to last.</p>
-              <p class="consensus">📊 strong — BIFL community + review-site premium pick</p>
+              <p class="consensus">📊 strong — BuyItForLife community + review-site premium pick</p>
               
                 <blockquote>“Southwire is the brand electricians I know actually trust. The Southwire 2588 12/3 lasts forever.”
                   <a href="https://www.reddit.com/r/BuyItForLife/comments/example2" target="_blank" rel="noopener">source ↗</a>
@@ -179,7 +329,7 @@ body {
         </div>
 
         
-          <div class="section caveats"><h2>Caveats</h2><p>Match gauge to the job: 12 AWG for power tools / long runs, 16 AWG is fine for a lamp or short indoor runs.</p></div>
+          <div class="section caveats"><h2>Caveats</h2><p>Match gauge to the job: 12 AWG for power tools and long runs, 16 AWG is fine for a lamp or short indoor runs.</p></div>
         
 
         <details class="evidence">
