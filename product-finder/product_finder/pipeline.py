@@ -11,7 +11,7 @@ from typing import List
 
 from . import config as cfg
 from .models import SourceSnippet, Recommendation, REVIEW, WEB
-from .retrieval import reddit_source, web_source, fetch
+from .retrieval import reddit_source, web_source, fetch, image_source
 from . import synthesis
 
 log = logging.getLogger("pipeline")
@@ -101,4 +101,12 @@ def run_search(query: str, mock: bool = False) -> Recommendation:
 
     rec = synthesis.synthesize(query, snippets, conf["synthesis"]["model"])
     rec.sources_searched = _sources_label(conf)
+
+    # Enrich each pick with a real product photo (best-effort, keyless).
+    # Cards fall back to line-art when no image is found.
+    if conf["retrieval"].get("fetch_images", True):
+        for t in rec.tiers:
+            if not t.image_url and t.product:
+                t.image_url = image_source.find_image(f"{t.product} product")
+
     return rec

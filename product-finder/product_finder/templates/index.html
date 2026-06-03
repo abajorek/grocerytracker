@@ -49,7 +49,8 @@
             <div class="tier tier-{{ t.tier }}">
               <div class="tier-media">
                 {% if t.image_url %}
-                  <img src="{{ t.image_url }}" alt="{{ t.product }}">
+                  <img src="{{ t.image_url }}" alt="{{ t.product }}" loading="lazy"
+                       referrerpolicy="no-referrer" onerror="this.remove()">
                 {% else %}
                   <svg class="art" viewBox="0 0 220 150" aria-hidden="true">
                     <rect x="26" y="58" width="38" height="34" rx="7"/>

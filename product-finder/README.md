@@ -27,6 +27,9 @@ search box (browser)
 - **Claude does the judging** — its prompt is built to ignore marketing fluff
   and affiliate roundups and surface what real users / independent testers
   actually conclude, with citations.
+- **Product photos** are looked up per pick via keyless DuckDuckGo image search
+  (toggle `retrieval.fetch_images` in `sources.yaml`); a card falls back to a
+  line-art illustration when no image is found.
 
 ## Setup
 

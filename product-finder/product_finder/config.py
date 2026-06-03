@@ -37,6 +37,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "web_results_per_site": 3,
         "general_web_results": 6,
         "fetch_full_text": True,   # try to pull article body (robots permitting)
+        "fetch_images": True,       # look up a real product photo per pick (keyless)
         "max_chars_per_snippet": 1500,
         "request_timeout": 10,
         "user_agent": "product-finder/0.1 (personal research; +https://github.com/abajorek)",
