@@ -84,6 +84,13 @@ python -m product_finder.cli "best extension cord" --mock
 ```
 …or click **"Try demo"** in the web UI.
 
+## Put it online (free)
+
+Want a web address you can open from your phone instead of running it locally?
+See **[DEPLOY.md](DEPLOY.md)** — a phone-friendly guide to deploying on Render's
+free tier via the included `render.yaml` blueprint. Set `APP_PASSWORD` to lock
+the public URL so only you can spend your Claude credits.
+
 ## Costs
 
 - Reddit API: free for this volume.

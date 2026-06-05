@@ -1,4 +1,5 @@
 flask>=3.0
+gunicorn>=21.2
 praw>=7.7
 anthropic>=0.40
 ddgs>=6.0

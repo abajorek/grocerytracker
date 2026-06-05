@@ -1,14 +1,17 @@
-"""Local Flask dashboard.
+"""Flask dashboard (local or deployed).
 
-    flask --app product_finder.app run         (or)   python -m product_finder.app
+Local:    flask --app product_finder.app run   (or  python -m product_finder.app)
+Deployed: gunicorn product_finder.app:app      (see DEPLOY.md / render.yaml)
 
-Open http://localhost:5000 , type a query, get a good/better/best answer with
-cited quotes. Recent queries are cached in-memory so you don't re-spend API
-calls on a refresh.
-"""
+Open the site, type a query, get a good/better/best answer with cited quotes.
+Recent queries are cached in-memory so you don't re-spend API calls on a
+refresh. When APP_PASSWORD is set, the whole site is gated behind a single
+password (recommended for any public deployment, since searches spend your
+Claude credits)."""
 
+import os
 import logging
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, Response
 
 from .pipeline import run_search
 from . import config as cfg
@@ -21,6 +24,19 @@ _CACHE = {}
 
 def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
+
+    @app.before_request
+    def _password_gate():
+        password = os.getenv("APP_PASSWORD")
+        if not password:
+            return None  # no password configured -> open (fine for local use)
+        auth = request.authorization
+        if auth and auth.password == password:
+            return None
+        return Response(
+            "Authentication required.", 401,
+            {"WWW-Authenticate": 'Basic realm="Product Finder"'},
+        )
 
     @app.route("/", methods=["GET"])
     def index():
