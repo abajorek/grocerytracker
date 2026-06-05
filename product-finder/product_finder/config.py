@@ -19,6 +19,7 @@ SOURCES_FILE = ROOT / "sources.yaml"
 DEFAULT_CONFIG: Dict[str, Any] = {
     "subreddits": ["BuyItForLife", "Tools", "HomeImprovement"],
     "review_sites": [
+        "reddit.com",          # pulls Reddit threads via web search (no API key)
         "rtings.com",
         "outdoorgearlab.com",
         "nytimes.com/wirecutter",
