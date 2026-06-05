@@ -12,7 +12,10 @@ subreddits:
 
 # Trusted review-site domains. Searched with `your query site:domain`.
 # Paywalled sites (e.g. consumerreports.org) return public snippets only.
+# reddit.com is included here so you still get Reddit threads via web search
+# even without the (gated) Reddit API — no key needed.
 review_sites:
+  - reddit.com
   - rtings.com
   - outdoorgearlab.com
   - nytimes.com/wirecutter

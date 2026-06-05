@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List
 
 from . import config as cfg
-from .models import SourceSnippet, Recommendation, REVIEW, WEB
+from .models import SourceSnippet, Recommendation, REDDIT, REVIEW, WEB
 from .retrieval import reddit_source, web_source, fetch, image_source
 from . import synthesis
 
@@ -54,8 +54,14 @@ def gather_evidence(query: str, conf: dict) -> List[SourceSnippet]:
             )
             if full:
                 text = full
+        if "reddit.com" in h.site:
+            stype = REDDIT
+        elif h.site != "web":
+            stype = REVIEW
+        else:
+            stype = WEB
         snippets.append(SourceSnippet(
-            source_type=REVIEW if h.site != "web" else WEB,
+            source_type=stype,
             title=h.title,
             url=h.url,
             text=(text or h.snippet)[:ret["max_chars_per_snippet"]],
