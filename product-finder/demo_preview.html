@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product Finder — good / better / best, no hoopla</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <style>
+/* Product Finder — editorial-luxury theme inspired by Gucci Beauty.
+   Warm ivory ground, high-contrast serif type, oxblood / bottle-green / antique
+   gold jewel tones, hairline gold rules, and a lot of quiet space. */
+
+:root {
+  --cream:        #F4EEE2;   /* page ground */
+  --cream-panel:  #FBF7EF;   /* cards / raised surfaces */
+  --ink:          #2A231C;   /* primary text */
+  --muted:        #6E6356;   /* secondary text */
+  --oxblood:      #7C1D1D;   /* signature deep red */
+  --green:        #213A2C;   /* bottle green */
+  --gold:         #A9803F;   /* antique gold */
+  --gold-soft:    #C7A36A;
+  --line:         rgba(169,128,63,0.40);  /* gold hairline */
+  --line-soft:    rgba(42,35,28,0.10);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 40px 20px;
+  font-size: 18px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 1040px;
+  margin: 0 auto;
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* ---- Header ---------------------------------------------------------- */
+.header {
+  text-align: center;
+  padding: 64px 30px 40px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.eyebrow {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase;
+  letter-spacing: 0.42em;
+  font-size: 0.72rem;
+  color: var(--gold);
+  margin-bottom: 18px;
+  padding-left: 0.42em; /* optical balance for tracking */
+}
+.header h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  font-size: 4.2rem;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+.header p {
+  margin-top: 16px;
+  font-size: 1.12rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.header p em { color: var(--oxblood); font-style: italic; }
+
+.main-content { padding: 44px 56px 56px; }
+
+/* ---- Search ---------------------------------------------------------- */
+.searchbar { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+.searchbar input {
+  flex: 1 1 320px;
+  padding: 16px 4px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.5rem;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--ink);
+}
+.searchbar input::placeholder { color: #b3a899; font-style: italic; }
+.searchbar input:focus { outline: none; border-bottom-color: var(--oxblood); }
+
+.searchbar button {
+  padding: 12px 26px;
+  font-family: 'EB Garamond', serif;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--cream);
+  background: var(--oxblood);
+  border: 1px solid var(--oxblood);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.searchbar button:hover { background: #5f1414; }
+.searchbar button.ghost { background: transparent; color: var(--ink); border-color: var(--ink); }
+.searchbar button.ghost:hover { background: var(--ink); color: var(--cream); }
+
+.status {
+  margin: 22px 2px 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+.status .ok  { color: var(--green);   font-weight: 500; }
+.status .off { color: var(--gold);    font-weight: 500; }
+
+/* ---- Banners --------------------------------------------------------- */
+.error {
+  margin-top: 26px; padding: 18px 22px; border-radius: 2px;
+  background: #f7ebe7; color: var(--oxblood);
+  border: 1px solid rgba(124,29,29,0.3); border-left: 3px solid var(--oxblood);
+  font-style: italic;
+}
+.mock-banner {
+  margin-top: 26px; padding: 12px 22px; border-radius: 2px;
+  background: transparent; color: var(--gold);
+  border: 1px solid var(--line);
+  text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.72rem;
+  text-align: center;
+}
+.placeholder { margin-top: 34px; color: var(--muted); font-size: 1.05rem; }
+.placeholder code {
+  font-family: 'EB Garamond', serif; font-style: italic;
+  color: var(--oxblood); background: var(--cream-panel);
+  padding: 1px 7px; border: 1px solid var(--line); border-radius: 2px;
+}
+
+/* ---- Sections -------------------------------------------------------- */
+.section { margin-top: 40px; }
+.section h2 {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.24em;
+  font-size: 0.78rem; color: var(--gold);
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.section.summary p { font-family: 'Cormorant Garamond', serif; font-size: 1.55rem;
+  line-height: 1.45; color: var(--ink); }
+.section.caveats p { font-style: italic; color: var(--muted); }
+
+/* ---- Tiers ----------------------------------------------------------- */
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-top: 44px;
+}
+.tier {
+  background: var(--cream-panel);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--gold);
+  border-radius: 2px;
+  padding: 30px 28px;
+  position: relative;
+}
+.tier-better { border-top-color: var(--green); }
+.tier-best   { border-top-color: var(--oxblood); }
+
+/* Product media: real photo if available, else editorial line-art. */
+.tier-media {
+  aspect-ratio: 5 / 4;
+  margin: -30px -28px 22px;        /* bleed to the card edges (matches padding) */
+  background: linear-gradient(135deg, #FBF7EF 0%, #ECE3D1 100%);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.tier-media img { width: 100%; height: 100%; object-fit: cover; }
+.tier-media .art {
+  width: 66%; height: auto;
+  fill: none; stroke: currentColor; stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round;
+  opacity: 0.85;
+}
+.tier-good   .tier-media { color: var(--gold); }
+.tier-better .tier-media { color: var(--green); }
+.tier-best   .tier-media { color: var(--oxblood); }
+
+.tier-label {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.3em;
+  font-size: 0.68rem; color: var(--gold);
+  display: block; margin-bottom: 14px;
+}
+.tier-better .tier-label { color: var(--green); }
+.tier-best   .tier-label { color: var(--oxblood); }
+
+.tier h3 {
+  font-family: 'Cormorant Garamond', serif; font-weight: 500;
+  font-size: 1.85rem; line-height: 1.15; color: var(--ink); margin-bottom: 10px;
+}
+.tier .price { font-size: 0.95rem; color: var(--muted); font-style: italic; }
+.tier .why { margin-bottom: 12px; color: var(--ink); }
+.tier .consensus {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted); margin-bottom: 16px;
+}
+.tier blockquote {
+  font-family: 'Cormorant Garamond', serif; font-style: italic;
+  font-size: 1.18rem; line-height: 1.45; color: var(--ink);
+  border-left: 2px solid var(--gold-soft);
+  padding: 4px 0 4px 18px; margin-top: 14px;
+}
+.tier blockquote a {
+  display: block; margin-top: 8px;
+  font-family: 'EB Garamond', serif; font-style: normal;
+  text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.66rem;
+  color: var(--oxblood); text-decoration: none;
+}
+.tier blockquote a:hover { color: var(--gold); }
+
+/* ---- Evidence -------------------------------------------------------- */
+.evidence { margin-top: 44px; border-top: 1px solid var(--line); padding-top: 8px; }
+.evidence summary {
+  cursor: pointer; list-style: none;
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.76rem;
+  color: var(--gold); padding: 14px 0;
+}
+.evidence summary::-webkit-details-marker { display: none; }
+.evidence summary::before { content: '+ '; }
+.evidence[open] summary::before { content: '— '; }
+
+.snippet { padding: 18px 0; border-bottom: 1px solid var(--line-soft); }
+.snippet-meta {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted); margin-bottom: 8px;
+}
+.snippet-meta a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+.snippet p { font-size: 1.02rem; color: var(--ink); }
+.badge {
+  padding: 3px 11px; border-radius: 2px; font-size: 0.62rem;
+  letter-spacing: 0.14em; border: 1px solid currentColor;
+}
+.badge-reddit { color: var(--oxblood); }
+.badge-review { color: var(--green); }
+.badge-web    { color: var(--gold); }
+
+/* ---- Footer ---------------------------------------------------------- */
+.footer {
+  margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line);
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+/* ---- Responsive ------------------------------------------------------ */
+@media (max-width: 600px) {
+  body { padding: 16px 8px; font-size: 17px; }
+  .header { padding: 44px 20px 30px; }
+  .header h1 { font-size: 2.9rem; }
+  .eyebrow { letter-spacing: 0.32em; }
+  .main-content { padding: 30px 22px 36px; }
+  .searchbar input { font-size: 1.3rem; }
+}
+
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="eyebrow">Curated &middot; Unbiased</div>
+      <h1>Product Finder</h1>
+      <p>Real opinions from Reddit, forums &amp; trusted review sites — the considered <em>good</em>, <em>better</em> &amp; <em>best</em>.</p>
+    </div>
+
+    <div class="main-content">
+      <form class="searchbar" action="#" method="post">
+        <input type="text" name="query" placeholder="e.g. best heavy-duty extension cord"
+               value="best heavy-duty extension cord" autofocus>
+        <button type="submit" name="mock" value="0">Search</button>
+        <button type="submit" name="mock" value="1" class="ghost" title="No API keys needed — uses bundled sample data to demo the layout">Try demo</button>
+      </form>
+
+      <div class="status">
+        Reddit API:
+        <span class="ok">connected</span>
+        &nbsp;·&nbsp; Claude:
+        <span class="ok">connected</span>
+      </div>
+
+      
+
+      
+        <div class="mock-banner">Preview — sample data + demo photos. A real search pulls live quotes and product images from your chosen sources.</div>
+
+        <div class="section summary">
+          <h2>Bottom line</h2>
+          <p>For garage, outdoor and power-tool use the consensus is clear: choose a 12-gauge (12 AWG) cord and match length to your needs. Gauge matters more than brand; avoid thin no-name cords that overheat under load.</p>
+        </div>
+
+        <div class="tiers">
+          
+            <div class="tier tier-good">
+              <div class="tier-media">
+                
+                  <img src="https://loremflickr.com/600/480/extension,cord,power?lock=11" alt="Iron Forge Cable 12/3" loading="lazy"
+                       referrerpolicy="no-referrer" onerror="this.remove()">
+                
+              </div>
+              <div class="tier-label">good</div>
+              <h3>Iron Forge Cable 12/3 <span class="price">~$30</span></h3>
+              <p class="why">Near-premium performance for noticeably less; ideal if you don't need 100ft.</p>
+              <p class="consensus">📊 strong — review-site Best Buy pick + multiple Reddit mentions</p>
+              
+                <blockquote>“The Iron Forge Cable 12/3 earned our Best Buy award: nearly the performance of premium cords at a lower price.”
+                  <a href="https://www.outdoorgearlab.com/example/extension-cords" target="_blank" rel="noopener">source ↗</a>
+                </blockquote>
+              
+            </div>
+          
+            <div class="tier tier-better">
+              <div class="tier-media">
+                
+                  <img src="https://loremflickr.com/600/480/extension,cord,power?lock=22" alt="US Wire & Cable 12/3 (100ft)" loading="lazy"
+                       referrerpolicy="no-referrer" onerror="this.remove()">
+                
+              </div>
+              <div class="tier-label">better</div>
+              <h3>US Wire & Cable 12/3 (100ft) <span class="price">~$70</span></h3>
+              <p class="why">Held voltage best at 100ft under load in testing; a long-haul workhorse.</p>
+              <p class="consensus">📊 strong — top tested pick + multi-year owner reports</p>
+              
+                <blockquote>“Our top pick for heavy use is a 12-gauge cord; the US Wire & Cable model held voltage best at 100ft.”
+                  <a href="https://www.rtings.com/example/best-extension-cords" target="_blank" rel="noopener">source ↗</a>
+                </blockquote>
+              
+            </div>
+          
+            <div class="tier tier-best">
+              <div class="tier-media">
+                
+                  <img src="https://loremflickr.com/600/480/extension,cord,power?lock=33" alt="Southwire 2588 12/3" loading="lazy"
+                       referrerpolicy="no-referrer" onerror="this.remove()">
+                
+              </div>
+              <div class="tier-label">best</div>
+              <h3>Southwire 2588 12/3 <span class="price">~$55</span></h3>
+              <p class="why">The brand electricians trust; durable in cold weather and built to last.</p>
+              <p class="consensus">📊 strong — BuyItForLife community + review-site premium pick</p>
+              
+                <blockquote>“Southwire is the brand electricians I know actually trust. The Southwire 2588 12/3 lasts forever.”
+                  <a href="https://www.reddit.com/r/BuyItForLife/comments/example2" target="_blank" rel="noopener">source ↗</a>
+                </blockquote>
+              
+            </div>
+          
+        </div>
+
+        
+          <div class="section caveats"><h2>Caveats</h2><p>Match gauge to the job: 12 AWG for power tools and long runs, 16 AWG is fine for a lamp or short indoor runs.</p></div>
+        
+
+        <details class="evidence">
+          <summary>Raw evidence (6 snippets)</summary>
+          
+            <div class="snippet">
+              <div class="snippet-meta">
+                <span class="badge badge-reddit">reddit</span>
+                <span>r/Tools</span>
+                <span>▲ 412</span>
+                <a href="https://www.reddit.com/r/Tools/comments/example1" target="_blank" rel="noopener">Best heavy-duty extension cord for a garage?</a>
+              </div>
+              <p>For anything in a garage or outdoors I just buy a 12-gauge (12 AWG) cord and never look back. The US Wire & Cable 100ft 12/3 has been bulletproof for me for 6 years of running a compressor and table saw.</p>
+            </div>
+          
+            <div class="snippet">
+              <div class="snippet-meta">
+                <span class="badge badge-reddit">reddit</span>
+                <span>r/Tools</span>
+                <span>▲ 287</span>
+                <a href="https://www.reddit.com/r/Tools/comments/example1" target="_blank" rel="noopener">comment on: Best heavy-duty extension cord for a garage?</a>
+              </div>
+              <p>Gauge matters more than brand. 16ga is fine for a lamp, but for power tools get 12ga. Cheap thin cords from big-box stores overheat. The Iron Forge 12/3 is a great budget option if you don't need 100ft.</p>
+            </div>
+          
+            <div class="snippet">
+              <div class="snippet-meta">
+                <span class="badge badge-reddit">reddit</span>
+                <span>r/BuyItForLife</span>
+                <span>▲ 153</span>
+                <a href="https://www.reddit.com/r/BuyItForLife/comments/example2" target="_blank" rel="noopener">BIFL extension cords?</a>
+              </div>
+              <p>Southwire is the brand electricians I know actually trust. The Southwire 2588 12/3 lasts forever. Avoid no-name Amazon cords, the copper is often undersized vs the label.</p>
+            </div>
+          
+            <div class="snippet">
+              <div class="snippet-meta">
+                <span class="badge badge-review">review</span>
+                <span>rtings.com</span>
+                
+                <a href="https://www.rtings.com/example/best-extension-cords" target="_blank" rel="noopener">The Best Extension Cords for Around the House and Yard</a>
+              </div>
+              <p>After testing for voltage drop under load, our top pick for heavy use is a 12-gauge cord; the US Wire & Cable model held voltage best at 100ft. For light indoor use a 16-gauge is adequate and far cheaper.</p>
+            </div>
+          
+            <div class="snippet">
+              <div class="snippet-meta">
+                <span class="badge badge-review">review</span>
+                <span>outdoorgearlab.com</span>
+                
+                <a href="https://www.outdoorgearlab.com/example/extension-cords" target="_blank" rel="noopener">Best Extension Cords of 2026, Tested</a>
+              </div>
+              <p>The Iron Forge Cable 12/3 earned our Best Buy award: nearly the performance of premium cords at a lower price. Premium pick remains Southwire for durability in cold weather.</p>
+            </div>
+          
+            <div class="snippet">
+              <div class="snippet-meta">
+                <span class="badge badge-web">web</span>
+                <span>web</span>
+                
+                <a href="https://example-forum.com/thread/gauge" target="_blank" rel="noopener">Extension cord gauge explained</a>
+              </div>
+              <p>Rule of thumb: shorter + thicker = less voltage drop. For 100ft of power tools use 10 or 12 AWG. 14-16 AWG only for short runs of low-draw devices.</p>
+            </div>
+          
+        </details>
+
+        <div class="footer">Sources searched: r/BuyItForLife · r/Tools · r/HomeImprovement · rtings.com · outdoorgearlab.com · consumerreports.org · general web</div>
+      
+    </div>
+  </div>
+</body>
+</html>

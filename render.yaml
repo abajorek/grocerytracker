@@ -1,0 +1,27 @@
+# Render.com Blueprint for the product-finder app (lives in product-finder/).
+# In Render: New + -> Blueprint -> pick this repo. You'll be prompted to paste
+# the secret values below (sync:false). See product-finder/DEPLOY.md.
+services:
+  - type: web
+    name: product-finder
+    runtime: python
+    plan: free
+    rootDir: product-finder
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn product_finder.app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: REDDIT_USER_AGENT
+        value: "product-finder/0.1 (render deploy)"
+      # Secrets — you paste these in the Render dashboard when prompted:
+      - key: REDDIT_CLIENT_ID
+        sync: false
+      - key: REDDIT_CLIENT_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Password to protect the public URL (anything you like). Strongly
+      # recommended — without it, anyone with the link spends your Claude credits.
+      - key: APP_PASSWORD
+        sync: false

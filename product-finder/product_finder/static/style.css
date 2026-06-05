@@ -1,0 +1,264 @@
+/* Product Finder — editorial-luxury theme inspired by Gucci Beauty.
+   Warm ivory ground, high-contrast serif type, oxblood / bottle-green / antique
+   gold jewel tones, hairline gold rules, and a lot of quiet space. */
+
+:root {
+  --cream:        #F4EEE2;   /* page ground */
+  --cream-panel:  #FBF7EF;   /* cards / raised surfaces */
+  --ink:          #2A231C;   /* primary text */
+  --muted:        #6E6356;   /* secondary text */
+  --oxblood:      #7C1D1D;   /* signature deep red */
+  --green:        #213A2C;   /* bottle green */
+  --gold:         #A9803F;   /* antique gold */
+  --gold-soft:    #C7A36A;
+  --line:         rgba(169,128,63,0.40);  /* gold hairline */
+  --line-soft:    rgba(42,35,28,0.10);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 40px 20px;
+  font-size: 18px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 1040px;
+  margin: 0 auto;
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* ---- Header ---------------------------------------------------------- */
+.header {
+  text-align: center;
+  padding: 64px 30px 40px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.eyebrow {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase;
+  letter-spacing: 0.42em;
+  font-size: 0.72rem;
+  color: var(--gold);
+  margin-bottom: 18px;
+  padding-left: 0.42em; /* optical balance for tracking */
+}
+.header h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  font-size: 4.2rem;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+.header p {
+  margin-top: 16px;
+  font-size: 1.12rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.header p em { color: var(--oxblood); font-style: italic; }
+
+.main-content { padding: 44px 56px 56px; }
+
+/* ---- Search ---------------------------------------------------------- */
+.searchbar { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+.searchbar input {
+  flex: 1 1 320px;
+  padding: 16px 4px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.5rem;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--ink);
+}
+.searchbar input::placeholder { color: #b3a899; font-style: italic; }
+.searchbar input:focus { outline: none; border-bottom-color: var(--oxblood); }
+
+.searchbar button {
+  padding: 12px 26px;
+  font-family: 'EB Garamond', serif;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--cream);
+  background: var(--oxblood);
+  border: 1px solid var(--oxblood);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.searchbar button:hover { background: #5f1414; }
+.searchbar button.ghost { background: transparent; color: var(--ink); border-color: var(--ink); }
+.searchbar button.ghost:hover { background: var(--ink); color: var(--cream); }
+
+.status {
+  margin: 22px 2px 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+.status .ok  { color: var(--green);   font-weight: 500; }
+.status .off { color: var(--gold);    font-weight: 500; }
+
+/* ---- Banners --------------------------------------------------------- */
+.error {
+  margin-top: 26px; padding: 18px 22px; border-radius: 2px;
+  background: #f7ebe7; color: var(--oxblood);
+  border: 1px solid rgba(124,29,29,0.3); border-left: 3px solid var(--oxblood);
+  font-style: italic;
+}
+.mock-banner {
+  margin-top: 26px; padding: 12px 22px; border-radius: 2px;
+  background: transparent; color: var(--gold);
+  border: 1px solid var(--line);
+  text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.72rem;
+  text-align: center;
+}
+.placeholder { margin-top: 34px; color: var(--muted); font-size: 1.05rem; }
+.placeholder code {
+  font-family: 'EB Garamond', serif; font-style: italic;
+  color: var(--oxblood); background: var(--cream-panel);
+  padding: 1px 7px; border: 1px solid var(--line); border-radius: 2px;
+}
+
+/* ---- Sections -------------------------------------------------------- */
+.section { margin-top: 40px; }
+.section h2 {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.24em;
+  font-size: 0.78rem; color: var(--gold);
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.section.summary p { font-family: 'Cormorant Garamond', serif; font-size: 1.55rem;
+  line-height: 1.45; color: var(--ink); }
+.section.caveats p { font-style: italic; color: var(--muted); }
+
+/* ---- Tiers ----------------------------------------------------------- */
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-top: 44px;
+}
+.tier {
+  background: var(--cream-panel);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--gold);
+  border-radius: 2px;
+  padding: 30px 28px;
+  position: relative;
+}
+.tier-better { border-top-color: var(--green); }
+.tier-best   { border-top-color: var(--oxblood); }
+
+/* Product media: real photo if available, else editorial line-art. */
+.tier-media {
+  aspect-ratio: 5 / 4;
+  margin: -30px -28px 22px;        /* bleed to the card edges (matches padding) */
+  background: linear-gradient(135deg, #FBF7EF 0%, #ECE3D1 100%);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.tier-media img { width: 100%; height: 100%; object-fit: cover; }
+.tier-media .art {
+  width: 66%; height: auto;
+  fill: none; stroke: currentColor; stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round;
+  opacity: 0.85;
+}
+.tier-good   .tier-media { color: var(--gold); }
+.tier-better .tier-media { color: var(--green); }
+.tier-best   .tier-media { color: var(--oxblood); }
+
+.tier-label {
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.3em;
+  font-size: 0.68rem; color: var(--gold);
+  display: block; margin-bottom: 14px;
+}
+.tier-better .tier-label { color: var(--green); }
+.tier-best   .tier-label { color: var(--oxblood); }
+
+.tier h3 {
+  font-family: 'Cormorant Garamond', serif; font-weight: 500;
+  font-size: 1.85rem; line-height: 1.15; color: var(--ink); margin-bottom: 10px;
+}
+.tier .price { font-size: 0.95rem; color: var(--muted); font-style: italic; }
+.tier .why { margin-bottom: 12px; color: var(--ink); }
+.tier .consensus {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted); margin-bottom: 16px;
+}
+.tier blockquote {
+  font-family: 'Cormorant Garamond', serif; font-style: italic;
+  font-size: 1.18rem; line-height: 1.45; color: var(--ink);
+  border-left: 2px solid var(--gold-soft);
+  padding: 4px 0 4px 18px; margin-top: 14px;
+}
+.tier blockquote a {
+  display: block; margin-top: 8px;
+  font-family: 'EB Garamond', serif; font-style: normal;
+  text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.66rem;
+  color: var(--oxblood); text-decoration: none;
+}
+.tier blockquote a:hover { color: var(--gold); }
+
+/* ---- Evidence -------------------------------------------------------- */
+.evidence { margin-top: 44px; border-top: 1px solid var(--line); padding-top: 8px; }
+.evidence summary {
+  cursor: pointer; list-style: none;
+  font-family: 'EB Garamond', serif;
+  text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.76rem;
+  color: var(--gold); padding: 14px 0;
+}
+.evidence summary::-webkit-details-marker { display: none; }
+.evidence summary::before { content: '+ '; }
+.evidence[open] summary::before { content: '— '; }
+
+.snippet { padding: 18px 0; border-bottom: 1px solid var(--line-soft); }
+.snippet-meta {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted); margin-bottom: 8px;
+}
+.snippet-meta a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+.snippet p { font-size: 1.02rem; color: var(--ink); }
+.badge {
+  padding: 3px 11px; border-radius: 2px; font-size: 0.62rem;
+  letter-spacing: 0.14em; border: 1px solid currentColor;
+}
+.badge-reddit { color: var(--oxblood); }
+.badge-review { color: var(--green); }
+.badge-web    { color: var(--gold); }
+
+/* ---- Footer ---------------------------------------------------------- */
+.footer {
+  margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line);
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+/* ---- Responsive ------------------------------------------------------ */
+@media (max-width: 600px) {
+  body { padding: 16px 8px; font-size: 17px; }
+  .header { padding: 44px 20px 30px; }
+  .header h1 { font-size: 2.9rem; }
+  .eyebrow { letter-spacing: 0.32em; }
+  .main-content { padding: 30px 22px 36px; }
+  .searchbar input { font-size: 1.3rem; }
+}
