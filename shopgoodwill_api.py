@@ -10,8 +10,9 @@ Highlights:
   * /api/snipes (schedule) + /api/snipe/tick (cron-driven worker).
   * /api/retail (Claude vision retail-price lookup).
   * /api/picks (saved-search seed; UI is paused).
-  * /api/feed?seller_id=N: filter the feed to one Goodwill chapter for
-    pickup-bundling.
+  * /api/feed?seller_id=N: filter to one Goodwill chapter.
+  * /api/deals: Claude-scored value scan, ranks items by delta of
+    estimated retail minus current bid.
 
 Deploy notes:
   * Render free tier sleeps after 15 min idle. Set up cron-job.org
@@ -62,6 +63,7 @@ PICKS_JS_FILE = ROOT / "picks.js"
 SNIPE_JS_FILE = ROOT / "snipe.js"
 AUTH_JS_FILE = ROOT / "auth.js"
 SELLER_JS_FILE = ROOT / "seller.js"
+DEALS_JS_FILE = ROOT / "deals.js"
 MANIFEST_FILE = ROOT / "manifest.webmanifest"
 ICON_FILE = ROOT / "icon.svg"
 
@@ -160,6 +162,7 @@ _FRAME_INJECTION = (
     "<script src=\"/snipe.js?v=1\"></script>"
     "<script src=\"/auth.js?v=2\"></script>"
     "<script src=\"/seller.js?v=1\"></script>"
+    "<script src=\"/deals.js?v=1\"></script>"
 )
 
 
@@ -281,9 +284,6 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
     current = raw.get("currentPrice")
     if current is None and final_price is not None:
         current = final_price
-    # ShopGoodwill exposes the seller (Goodwill chapter) under a few keys
-    # depending on endpoint. Capture both id + name so the frontend can
-    # offer "show all from this seller" without an extra round-trip.
     raw_seller_id = (
         raw.get("sellerId") or raw.get("sellerID")
         or raw.get("seller_id") or raw.get("storeId") or 0
@@ -365,8 +365,6 @@ def _supabase(method, path, *, body=None, params=None, prefer=None):
 
 
 def _read_session_auth() -> Optional[dict]:
-    """Stored session credentials (token + username) from Supabase or local
-    JSON fallback. Returns dict like {token, username, saved_at} or None."""
     if _supabase_enabled():
         try:
             rows = _supabase("GET", "thrift_settings",
@@ -416,7 +414,6 @@ def _clear_session_auth():
 
 
 def _get_active_token() -> str:
-    """Active ShopGoodwill JWT — Supabase session first, env-var fallback."""
     sess = _read_session_auth()
     if sess and sess.get("token"):
         return str(sess["token"]).strip()
@@ -424,7 +421,6 @@ def _get_active_token() -> str:
 
 
 def _shopgoodwill_login(username: str, password: str, remember: bool = True) -> dict:
-    """Call ShopGoodwill's auth endpoint and return the parsed response."""
     payload = {
         "username": username,
         "password": password,
@@ -469,8 +465,6 @@ def _extract_token_from_login(data: dict) -> Optional[str]:
         return None
     for key in ("accessToken", "access_token", "token", "authToken", "jwt"):
         v = data.get(key)
-        # Accept any non-trivial string. ShopGoodwill's accessToken is a
-        # GUID-like string, not a standard JWT prefixed with "eyJ".
         if isinstance(v, str) and len(v) >= 16:
             return v
     inner = data.get("data")
@@ -480,8 +474,6 @@ def _extract_token_from_login(data: dict) -> Optional[str]:
 
 
 def _extract_display_name(data: dict, fallback: str) -> str:
-    """Pull the friendliest display name we can from the login response.
-    ShopGoodwill nests user info under a `buyer` object."""
     if not isinstance(data, dict):
         return fallback
     for key in ("username", "userName", "name", "displayName"):
@@ -585,7 +577,6 @@ def _place_bid(item_id, amount, quantity=1):
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"ShopGoodwill network error: {exc}")
     if resp.status_code in (401, 403):
-        # Token is bad — clear the stored session so the user is prompted to re-login.
         _clear_session_auth()
         raise HTTPException(status_code=401, detail=(
             "ShopGoodwill rejected the session (likely expired). Tap Sign in "
@@ -1062,6 +1053,88 @@ def _search_one_pick(pick):
     return items
 
 
+# ---------- deals (Claude-scored value scan) ----------
+
+# Title-token blocklist for clothing / shoes / apparel. The user wants
+# everything-but-clothes for the first deals pass — bags and watches
+# count as accessories Claude is good at valuing, so they stay in.
+_CLOTHING_TOKENS = {
+    "shirt", "shirts", "tshirt", "t-shirt", "tee", "tees",
+    "blouse", "blouses", "polo", "polos",
+    "jacket", "jackets", "coat", "coats", "parka", "windbreaker",
+    "raincoat", "overcoat", "blazer", "cardigan", "vest", "vests",
+    "sweater", "sweaters", "hoodie", "hoodies", "pullover", "henley", "henleys",
+    "pants", "trousers", "jeans", "shorts", "leggings", "chinos", "slacks",
+    "dress", "dresses", "skirt", "skirts", "romper", "jumpsuit",
+    "tank", "tanks", "camisole", "cami", "bodysuit",
+    "sock", "socks", "tights", "hosiery",
+    "shoe", "shoes", "boot", "boots", "sneaker", "sneakers",
+    "sandal", "sandals", "heel", "heels", "loafer", "loafers",
+    "mule", "mules", "moccasin", "moccasins", "espadrille", "espadrilles",
+    "clog", "clogs", "slipper", "slippers", "flat", "flats", "oxford", "oxfords",
+    "scarf", "scarves", "shawl",
+    "lingerie", "bra", "panty", "panties", "thong", "thongs",
+    "swimsuit", "swimwear", "bikini", "trunks",
+    "robe", "robes", "kimono", "kaftan",
+    "uniform", "scrub", "scrubs", "apron",
+}
+
+
+def _is_likely_clothing(raw_item: dict, normalized: FeedItem) -> bool:
+    """Cheap heuristic to keep clothing out of the deals feed. Uses
+    ShopGoodwill's category string when present, falls back to a
+    title-token check."""
+    cat = ""
+    for key in ("categoryName", "categoryFullPath", "categoryPath", "category"):
+        v = raw_item.get(key)
+        if isinstance(v, str):
+            cat = v.lower()
+            break
+    if cat:
+        for needle in ("cloth", "apparel", "shoes", "footwear", "outerwear"):
+            if needle in cat:
+                return True
+    title_lower = _strip_diacritics(normalized.title or "").lower()
+    tokens = set(re.findall(r"[a-z][a-z\-]+", title_lower))
+    return bool(tokens & _CLOTHING_TOKENS)
+
+
+def _score_item_for_deal(item: FeedItem) -> Optional[dict]:
+    """Fetch Claude's retail estimate for a single item and shape it into
+    a deal record. Returns None if estimate failed or item isn't a deal."""
+    try:
+        est = _retail_estimate(item.id, item.title, item.brand, item.image_url)
+    except Exception:
+        return None
+    if not isinstance(est, dict) or not est.get("ok"):
+        return None
+    try:
+        rl = float(est.get("retail_low") or 0)
+        rh = float(est.get("retail_high") or 0)
+    except (ValueError, TypeError):
+        return None
+    if not rl and not rh:
+        return None
+    retail_mid = (rl + rh) / 2.0 if (rl and rh) else (rh or rl)
+    if retail_mid <= 0:
+        return None
+    delta = retail_mid - float(item.current_price)
+    if delta <= 0:
+        return None
+    base = item.model_dump() if hasattr(item, "model_dump") else item.dict()
+    base.update({
+        "retail_low": rl,
+        "retail_high": rh,
+        "retail_mid": retail_mid,
+        "confidence": est.get("confidence", "low"),
+        "product": est.get("product", ""),
+        "deal_note": est.get("note", ""),
+        "delta": round(delta, 2),
+        "delta_pct": round((retail_mid / max(1.0, float(item.current_price))) - 1.0, 3),
+    })
+    return base
+
+
 # ---------- snipes ----------
 
 _SNIPE_LOCK = threading.Lock()
@@ -1264,9 +1337,6 @@ def api_login(req: LoginRequest):
     data = _shopgoodwill_login(username, req.password, remember=req.remember)
     token = _extract_token_from_login(data)
     if not token:
-        # Diagnostic-grade error: include type/length/short prefix of each
-        # token-shaped field so we can see what ShopGoodwill actually returned
-        # without leaking the full credential.
         def _describe(v):
             if v is None:
                 return "null"
@@ -1443,6 +1513,81 @@ def save_picks(picks: List[Dict[str, Any]]):
     return store_set_picks(picks)
 
 
+@app.get("/api/deals")
+def deals(
+    query: str = Query("", description="Optional search term; empty scans across all listings"),
+    max_price: float = Query(100, gt=0, le=1000),
+    min_price: float = Query(5, ge=0),
+    hours_left_max: int = Query(0, ge=0, le=168, description="0 = no time limit"),
+    exclude_clothing: bool = Query(True),
+    sort: str = Query("delta", description="delta | weighted | ending_soon"),
+    limit: int = Query(30, ge=1, le=50),
+    sample_size: int = Query(40, ge=10, le=80, description="ShopGoodwill items to scan before scoring"),
+):
+    """Scan ShopGoodwill for items where Claude's retail estimate exceeds
+    the current bid, ranked by value delta. Best for finding underpriced
+    items ending soon to snipe.
+
+    The retail estimate piggybacks on /api/retail's 24h cache, so a
+    repeat scan inside that window is near-instant.
+    """
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Deal scanning needs Claude vision. Set ANTHROPIC_API_KEY in Render → Environment.",
+        )
+
+    try:
+        raw_items = _search_shopgoodwill(
+            (query or "").strip(),
+            page=1, page_size=int(sample_size),
+            sort="ending_soon",
+            price_min=float(min_price), price_max=float(max_price),
+        )
+    except HTTPException as exc:
+        raise exc
+
+    candidates: List[FeedItem] = []
+    for raw in raw_items:
+        try:
+            n = _normalize_item(raw, (query or "Deal").strip() or "Deal")
+        except Exception:
+            continue
+        if n is None or n.is_closed:
+            continue
+        if n.current_price > max_price or n.current_price < min_price:
+            continue
+        if hours_left_max > 0 and n.seconds_left > hours_left_max * 3600:
+            continue
+        if exclude_clothing and _is_likely_clothing(raw, n):
+            continue
+        candidates.append(n)
+
+    SCORE_CAP = min(40, len(candidates))
+    to_score = candidates[:SCORE_CAP]
+
+    scored_deals = []
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for result in pool.map(_score_item_for_deal, to_score):
+            if result is not None:
+                scored_deals.append(result)
+
+    def big_far(seconds_left: int) -> int:
+        return seconds_left if seconds_left > 0 else 10 ** 9
+
+    if sort == "weighted":
+        def weight(d):
+            hrs = max(0.5, big_far(d["seconds_left"]) / 3600.0)
+            return -(d["delta"] / (hrs ** 0.5))
+        scored_deals.sort(key=weight)
+    elif sort == "ending_soon":
+        scored_deals.sort(key=lambda d: (big_far(d["seconds_left"]), -d["delta"]))
+    else:
+        scored_deals.sort(key=lambda d: (-d["delta"], big_far(d["seconds_left"])))
+
+    return scored_deals[:limit]
+
+
 @app.get("/api/picks/feed", response_model=List[FeedItem])
 def picks_feed(page: int = Query(1, ge=1), picks_per_page: int = Query(12, ge=1, le=24)):
     picks = store_get_picks()
@@ -1531,6 +1676,13 @@ def serve_auth_js():
 def serve_seller_js():
     if SELLER_JS_FILE.exists():
         return FileResponse(str(SELLER_JS_FILE), media_type="application/javascript")
+    raise HTTPException(status_code=404)
+
+
+@app.get("/deals.js")
+def serve_deals_js():
+    if DEALS_JS_FILE.exists():
+        return FileResponse(str(DEALS_JS_FILE), media_type="application/javascript")
     raise HTTPException(status_code=404)
 
 
