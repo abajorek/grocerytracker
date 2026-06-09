@@ -10,6 +10,8 @@ Highlights:
   * /api/snipes (schedule) + /api/snipe/tick (cron-driven worker).
   * /api/retail (Claude vision retail-price lookup).
   * /api/picks (saved-search seed; UI is paused).
+  * /api/feed?seller_id=N: filter the feed to one Goodwill chapter for
+    pickup-bundling.
 
 Deploy notes:
   * Render free tier sleeps after 15 min idle. Set up cron-job.org
@@ -59,6 +61,7 @@ FRONTEND_FILE = ROOT / "shopgoodwill_feed.html"
 PICKS_JS_FILE = ROOT / "picks.js"
 SNIPE_JS_FILE = ROOT / "snipe.js"
 AUTH_JS_FILE = ROOT / "auth.js"
+SELLER_JS_FILE = ROOT / "seller.js"
 MANIFEST_FILE = ROOT / "manifest.webmanifest"
 ICON_FILE = ROOT / "icon.svg"
 
@@ -156,6 +159,7 @@ _FRAME_INJECTION = (
     "<script src=\"/picks.js?v=4\"></script>"
     "<script src=\"/snipe.js?v=1\"></script>"
     "<script src=\"/auth.js?v=2\"></script>"
+    "<script src=\"/seller.js?v=1\"></script>"
 )
 
 
@@ -173,6 +177,8 @@ class FeedItem(BaseModel):
     brand: str
     location: Optional[str] = None
     is_closed: bool = False
+    seller_id: int = 0
+    seller_name: str = ""
 
 
 class Favorite(BaseModel):
@@ -275,6 +281,21 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
     current = raw.get("currentPrice")
     if current is None and final_price is not None:
         current = final_price
+    # ShopGoodwill exposes the seller (Goodwill chapter) under a few keys
+    # depending on endpoint. Capture both id + name so the frontend can
+    # offer "show all from this seller" without an extra round-trip.
+    raw_seller_id = (
+        raw.get("sellerId") or raw.get("sellerID")
+        or raw.get("seller_id") or raw.get("storeId") or 0
+    )
+    try:
+        seller_id = int(raw_seller_id) if raw_seller_id else 0
+    except (ValueError, TypeError):
+        seller_id = 0
+    seller_name = (
+        raw.get("sellerName") or raw.get("sellerCompanyName")
+        or raw.get("storeName") or ""
+    )
     return FeedItem(
         id=int(item_id),
         title=str(raw.get("title", "") or "").strip(),
@@ -289,6 +310,8 @@ def _normalize_item(raw: dict, brand_query: str) -> Optional[FeedItem]:
         brand=brand_query,
         location=raw.get("sellerName") or raw.get("location"),
         is_closed=is_closed,
+        seller_id=seller_id,
+        seller_name=str(seller_name)[:120],
     )
 
 
@@ -485,7 +508,8 @@ def _extract_display_name(data: dict, fallback: str) -> str:
 
 def _build_search_payload(*, query, page, page_size, sort="ending_soon",
                           price_min=0, price_max=0, buy_now_only=False,
-                          no_pickup=False, include_closed=False, closed_days_back=7):
+                          no_pickup=False, include_closed=False, closed_days_back=7,
+                          seller_ids=""):
     sort_col, sort_desc = SORT_OPTIONS.get(sort, SORT_OPTIONS["ending_soon"])
     high = price_max if price_max and price_max > 0 else 999999
     low = price_min if price_min and price_min >= 0 else 0
@@ -493,7 +517,8 @@ def _build_search_payload(*, query, page, page_size, sort="ending_soon",
         "isSize": False, "isWeddingCatagory": "false",
         "isMultipleCategoryIds": False, "isFromHeaderMenuTab": False,
         "layout": "", "searchText": (query or "").replace('"', ""),
-        "selectedGroup": "", "selectedCategoryIds": "", "selectedSellerIds": "",
+        "selectedGroup": "", "selectedCategoryIds": "",
+        "selectedSellerIds": str(seller_ids or ""),
         "lowPrice": str(low), "highPrice": str(high),
         "searchBuyNowOnly": "true" if buy_now_only else "",
         "searchPickupOnly": "false",
@@ -1134,21 +1159,27 @@ def get_feed(
     has_bids: bool = Query(False),
     include_closed: bool = Query(False),
     closed_days_back: int = Query(7, ge=1, le=30),
+    seller_id: str = Query("", description="Comma-separated ShopGoodwill seller IDs"),
 ):
     brand = (brand or "").strip()
     q = (q or "").strip()
+    seller_id = (seller_id or "").strip()
     parts = [p for p in (brand, q) if p]
-    if not parts:
-        raise HTTPException(status_code=400, detail="Provide brand or q (search query)")
+    if not parts and not seller_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide brand, q (search query), or seller_id",
+        )
     search_text = " ".join(parts)
     raw_items = _search_shopgoodwill(
         search_text, page=page, page_size=page_size,
         sort=sort, price_min=price_min, price_max=price_max,
         buy_now_only=buy_now_only, no_pickup=no_pickup,
         include_closed=include_closed, closed_days_back=closed_days_back,
+        seller_ids=seller_id,
     )
     items = []
-    label = brand or q
+    label = brand or q or "Seller"
     for raw in raw_items:
         try:
             normalized = _normalize_item(raw, label)
@@ -1493,6 +1524,13 @@ def serve_snipe_js():
 def serve_auth_js():
     if AUTH_JS_FILE.exists():
         return FileResponse(str(AUTH_JS_FILE), media_type="application/javascript")
+    raise HTTPException(status_code=404)
+
+
+@app.get("/seller.js")
+def serve_seller_js():
+    if SELLER_JS_FILE.exists():
+        return FileResponse(str(SELLER_JS_FILE), media_type="application/javascript")
     raise HTTPException(status_code=404)
 
 
