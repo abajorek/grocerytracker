@@ -162,7 +162,7 @@ _FRAME_INJECTION = (
     "<script src=\"/snipe.js?v=1\"></script>"
     "<script src=\"/auth.js?v=2\"></script>"
     "<script src=\"/seller.js?v=1\"></script>"
-    "<script src=\"/deals.js?v=1\"></script>"
+    "<script src=\"/deals.js?v=2\"></script>"
 )
 
 
@@ -365,6 +365,8 @@ def _supabase(method, path, *, body=None, params=None, prefer=None):
 
 
 def _read_session_auth() -> Optional[dict]:
+    """Stored session credentials (token + username) from Supabase or local
+    JSON fallback. Returns dict like {token, username, saved_at} or None."""
     if _supabase_enabled():
         try:
             rows = _supabase("GET", "thrift_settings",
@@ -414,6 +416,7 @@ def _clear_session_auth():
 
 
 def _get_active_token() -> str:
+    """Active ShopGoodwill JWT — Supabase session first, env-var fallback."""
     sess = _read_session_auth()
     if sess and sess.get("token"):
         return str(sess["token"]).strip()
@@ -421,6 +424,7 @@ def _get_active_token() -> str:
 
 
 def _shopgoodwill_login(username: str, password: str, remember: bool = True) -> dict:
+    """Call ShopGoodwill's auth endpoint and return the parsed response."""
     payload = {
         "username": username,
         "password": password,
@@ -474,6 +478,8 @@ def _extract_token_from_login(data: dict) -> Optional[str]:
 
 
 def _extract_display_name(data: dict, fallback: str) -> str:
+    """Pull the friendliest display name we can from the login response.
+    ShopGoodwill nests user info under a `buyer` object."""
     if not isinstance(data, dict):
         return fallback
     for key in ("username", "userName", "name", "displayName"):
@@ -1055,9 +1061,6 @@ def _search_one_pick(pick):
 
 # ---------- deals (Claude-scored value scan) ----------
 
-# Title-token blocklist for clothing / shoes / apparel. The user wants
-# everything-but-clothes for the first deals pass — bags and watches
-# count as accessories Claude is good at valuing, so they stay in.
 _CLOTHING_TOKENS = {
     "shirt", "shirts", "tshirt", "t-shirt", "tee", "tees",
     "blouse", "blouses", "polo", "polos",
@@ -1081,9 +1084,7 @@ _CLOTHING_TOKENS = {
 
 
 def _is_likely_clothing(raw_item: dict, normalized: FeedItem) -> bool:
-    """Cheap heuristic to keep clothing out of the deals feed. Uses
-    ShopGoodwill's category string when present, falls back to a
-    title-token check."""
+    """Cheap heuristic to keep clothing out of the deals feed."""
     cat = ""
     for key in ("categoryName", "categoryFullPath", "categoryPath", "category"):
         v = raw_item.get(key)
@@ -1525,12 +1526,7 @@ def deals(
     sample_size: int = Query(40, ge=10, le=80, description="ShopGoodwill items to scan before scoring"),
 ):
     """Scan ShopGoodwill for items where Claude's retail estimate exceeds
-    the current bid, ranked by value delta. Best for finding underpriced
-    items ending soon to snipe.
-
-    The retail estimate piggybacks on /api/retail's 24h cache, so a
-    repeat scan inside that window is near-instant.
-    """
+    the current bid, ranked by value delta."""
     if not ANTHROPIC_API_KEY:
         raise HTTPException(
             status_code=503,
