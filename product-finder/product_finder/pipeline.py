@@ -12,7 +12,7 @@ from typing import List
 from . import config as cfg
 from .models import SourceSnippet, Recommendation, REDDIT, REVIEW, WEB
 from .retrieval import reddit_source, web_source, fetch, image_source
-from . import synthesis
+from . import synthesis, verify
 
 log = logging.getLogger("pipeline")
 
@@ -69,7 +69,10 @@ def gather_evidence(query: str, conf: dict) -> List[SourceSnippet]:
             origin=h.site,
         ))
 
-    return snippets[: conf["synthesis"]["max_snippets"]]
+    kept, blocked = verify.filter_blocked(snippets, conf["trust"])
+    if blocked:
+        log.info("Dropped %d affiliate/spam pages: %s", len(blocked), sorted(set(blocked)))
+    return kept[: conf["synthesis"]["max_snippets"]], blocked
 
 
 def _sources_label(conf: dict) -> List[str]:
@@ -84,19 +87,21 @@ def run_search(query: str, mock: bool = False) -> Recommendation:
     conf = cfg.load_config()
 
     if mock:
-        snippets = _load_fixture()
+        snippets, blocked = verify.filter_blocked(_load_fixture(), conf["trust"])
         rec = synthesis.synthesize_mock(query, snippets)
         rec.sources_searched = ["(mock fixtures)"]
-        return rec
+        return verify.apply_all(rec, blocked, conf["trust"])
 
-    snippets = gather_evidence(query, conf)
+    snippets, blocked = gather_evidence(query, conf)
     if not snippets:
         rec = Recommendation(
             query=query,
-            summary="No evidence found. Check your Reddit credentials / network, "
-                    "or widen the sources in sources.yaml.",
+            summary="No usable evidence found. Check your network, or widen the "
+                    "sources in sources.yaml.",
             sources_searched=_sources_label(conf),
         )
+        rec.coverage = verify.coverage([], blocked, conf["trust"])
+        rec.blocked_sources = sorted(set(blocked))
         return rec
 
     if not cfg.claude_available():
@@ -107,6 +112,7 @@ def run_search(query: str, mock: bool = False) -> Recommendation:
 
     rec = synthesis.synthesize(query, snippets, conf["synthesis"]["model"])
     rec.sources_searched = _sources_label(conf)
+    verify.apply_all(rec, blocked, conf["trust"])
 
     # Enrich each pick with a real product photo (best-effort, keyless).
     # Cards fall back to line-art when no image is found.

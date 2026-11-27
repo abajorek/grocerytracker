@@ -42,10 +42,19 @@ class Tier:
     tier: str                 # "good" | "better" | "best"
     product: str
     why: str
-    consensus: str            # e.g. "strong — 5 independent sources agree"
+    consensus: str            # rewritten by verify.grade_evidence from counted sources
     quotes: List[Quote] = field(default_factory=list)
     approx_price: str = ""
     image_url: str = ""       # optional real product photo (else card shows line-art)
+    # Filled in by verify.py, not by Claude:
+    rating: Dict[str, Any] = field(default_factory=dict)  # {stars, count, source_url}
+    evidence_grade: str = ""  # High | Medium | Low
+    source_count: int = 0
+    trusted_count: int = 0
+    community_count: int = 0
+    source_domains: List[str] = field(default_factory=list)
+    verified: bool = True     # False when no quote survived verification
+    warning: str = ""
 
 
 @dataclass
@@ -58,6 +67,9 @@ class Recommendation:
     sources_searched: List[str] = field(default_factory=list)
     snippets: List[SourceSnippet] = field(default_factory=list)  # raw evidence
     mock: bool = False
+    coverage: Dict[str, int] = field(default_factory=dict)
+    blocked_sources: List[str] = field(default_factory=list)
+    dropped_quotes: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -68,4 +80,7 @@ class Recommendation:
             "sources_searched": self.sources_searched,
             "snippets": [s.to_dict() for s in self.snippets],
             "mock": self.mock,
+            "coverage": self.coverage,
+            "blocked_sources": self.blocked_sources,
+            "dropped_quotes": self.dropped_quotes,
         }

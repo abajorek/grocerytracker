@@ -26,10 +26,35 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "consumerreports.org",
     ],
     "enable_general_web": True,
+    "trust": {
+        # Sites that do their own hands-on testing.
+        "trusted_reviewers": [
+            "rtings.com", "outdoorgearlab.com", "nytimes.com",
+            "consumerreports.org", "kingarthurbaking.com", "seriouseats.com",
+            "americastestkitchen.com", "tomsguide.com", "reviewed.com",
+        ],
+        # Real-owner discussion.
+        "community": ["reddit.com", "garagejournal.com", "lumberjocks.com"],
+        # Affiliate / SEO pages that turned up in real searches. Dropped
+        # before synthesis. "*." entries match any subdomain of that host.
+        "blocked_domains": [
+            "clevelandheart.com", "foliumbiosciences.com", "talkofthehouse.com",
+            "peggyomara.com", "thewearify.com", "pixelfy.me",
+            "narcosis-the-game.com", "beatcopgame.com", "mayfairfarms.com",
+            "fuhrmannmanagement.com", "software995.net", "acfc.org", "iere.org",
+            "theconsumers.guide", "itechguides.com", "csr.hdsupply.com",
+            "jambon-de-bayonne.com", "dev.asburyseminary.edu",
+            "notredame-high.co.uk", "sgc.unach.edu.ec", "*.desertcart.com",
+            "desertcart.com.ar", "desertcart.co.th", "desertcart.nl",
+            "desertcart.vn", "desertcart.co.za", "desertcart.com.cy",
+            "*.pages.dev", "*.netlify.app", "*.github.io",
+        ],
+        "min_rating": 4.0,
+    },
     "synthesis": {
         # Default to a fast, capable, cost-effective model. Swap to
-        # "claude-opus-4-8" in sources.yaml for the deepest synthesis.
-        "model": "claude-sonnet-4-6",
+        # "claude-opus-5-5" in sources.yaml for the deepest synthesis.
+        "model": "claude-sonnet-5-5",
         "max_snippets": 40,        # hard cap on evidence sent to Claude
     },
     "retrieval": {

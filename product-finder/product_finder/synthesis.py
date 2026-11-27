@@ -22,16 +22,27 @@ with a URL. Your job is to answer the user's "what should I buy" question with a
 GOOD / BETTER / BEST tiering grounded ONLY in that evidence.
 
 Hard rules:
-- Recommend specific products/models, not vague categories.
-- Prefer claims that MULTIPLE independent sources agree on. State consensus
-  honestly (e.g. "strong — 5 sources agree" vs "single reviewer's opinion").
+- Recommend specific products/models, not vague categories. Use the exact
+  model name or number the evidence uses; product lines often mix materials
+  or specs across models.
+- Use ONLY the evidence. Do not add facts, specs, prices, ratings or reviewer
+  opinions from memory. If the evidence does not say it, leave it out.
+- Prefer picks that MULTIPLE independent sources agree on. Do not claim a
+  site or community (Wirecutter, Reddit, a subreddit) recommends something
+  unless an evidence item from that site says so.
 - IGNORE marketing fluff, affiliate "top 10" listicles, and SEO spam. If a
   source reads like an affiliate roundup with no real testing or user
   experience, discount it.
-- Every tier MUST include at least one short verbatim quote with its source URL.
-  Quotes must come from the provided evidence — never invent them.
-- If the evidence is thin or conflicting, say so plainly in caveats. Do not
-  pad. No hype.
+- Every tier MUST include at least one short quote copied EXACTLY,
+  character for character, from one evidence item, with that item's URL.
+  Quotes are checked against the evidence and any that do not match are
+  removed.
+- Ratings: fill "rating" only when an evidence item states a star rating for
+  that exact product; copy the number and review count as written and give
+  that item's URL. Otherwise omit it. Never recommend a product the evidence
+  rates below 4 stars; if every option rates poorly, say so in the summary.
+- In caveats, say plainly what is thin, conflicting or missing (for example
+  "no Reddit discussion found", "no independent testing found"). No hype.
 - Keep "why" to one or two sentences."""
 
 EMIT_TOOL = {
@@ -58,6 +69,17 @@ EMIT_TOOL = {
                             "type": "string",
                             "description": "Optional direct product image URL ONLY if "
                                            "one clearly appears in the evidence; else omit.",
+                        },
+                        "rating": {
+                            "type": "object",
+                            "description": "Only if an evidence item states a star "
+                                           "rating for this exact product; else omit.",
+                            "properties": {
+                                "stars": {"type": "number"},
+                                "count": {"type": "integer"},
+                                "source_url": {"type": "string"},
+                            },
+                            "required": ["stars", "source_url"],
                         },
                         "quotes": {
                             "type": "array",
@@ -136,6 +158,7 @@ def _build(query, data, snippets, mock):
             consensus=t.get("consensus", ""),
             approx_price=t.get("approx_price", ""),
             image_url=t.get("image_url", ""),
+            rating=dict(t.get("rating") or {}),
             quotes=[Quote(q.get("text", ""), q.get("url", ""))
                     for q in t.get("quotes", [])],
         ))
