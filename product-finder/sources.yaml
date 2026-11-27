@@ -24,10 +24,16 @@ review_sites:
 # Also search the open web / forums beyond the trusted list above?
 enable_general_web: true
 
+# Source trust. The trusted-reviewer, community and affiliate-spam blocklists
+# live in product_finder/config.py. A list you put here REPLACES that default
+# list rather than adding to it, so copy the defaults over before editing one.
+trust:
+  min_rating: 4.0         # picks rated below this get a "not recommended" flag
+
 synthesis:
-  # "claude-sonnet-4-6" = fast + cheap + great. Use "claude-opus-4-8" for the
+  # "claude-sonnet-5-5" = fast + inexpensive. Use "claude-opus-5-5" for the
   # deepest analysis on hard questions.
-  model: claude-sonnet-4-6
+  model: claude-sonnet-5-5
   max_snippets: 40        # cap on evidence sent to Claude (controls cost)
 
 retrieval:

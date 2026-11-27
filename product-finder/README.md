@@ -29,7 +29,28 @@ search box (browser)
   actually conclude, with citations.
 - **Product photos** are looked up per pick via keyless DuckDuckGo image search
   (toggle `retrieval.fetch_images` in `sources.yaml`); a card falls back to a
-  line-art illustration when no image is found.
+  line-art illustration when no image is found. Photos are labeled as
+  possibly not the exact model.
+
+## How answers are checked
+
+Claude's answer is checked in code (`product_finder/verify.py`) before you
+see it:
+
+- **Affiliate and SEO-spam pages are dropped** before Claude reads anything.
+- **Quotes must appear in the evidence.** Any quote that doesn't match its
+  source text is removed. A pick left with no verified quote is flagged.
+- **Star ratings must appear in their cited source**, and picks rated below
+  `trust.min_rating` (4.0 by default) get a "not recommended" warning.
+- **Consensus is counted, not claimed.** Each pick is graded High, Medium or
+  Low from the number of independent sites that mention it and whether one is
+  a hands-on tester.
+- **Coverage is shown, zeros included**, so "no Reddit threads found" is
+  visible instead of hidden.
+
+The same rules govern recommendations Claude gives in chat; see
+[RESEARCH_PROTOCOL.md](RESEARCH_PROTOCOL.md). Run the checks' tests with
+`python -m pytest tests`.
 
 ## Setup
 
@@ -56,7 +77,7 @@ cp .env.example .env        # then fill in the keys below
 ### 2. Claude API key
 
 Get one at <https://console.anthropic.com/> → **API Keys**, and put it in
-`.env` as `ANTHROPIC_API_KEY`. Synthesis defaults to `claude-sonnet-4-6`
+`.env` as `ANTHROPIC_API_KEY`. Synthesis defaults to `claude-sonnet-5-5`
 (fast + inexpensive); a typical search costs well under a cent.
 
 ### 3. Choose your sources
@@ -111,7 +132,9 @@ the public URL so only you can spend your Claude credits.
 - Drop-in **Brave/Bing Search API** key for more reliable, higher-volume search
   (swap the backend in `retrieval/web_source.py`).
 - Persist past searches; compare picks over time.
-- Per-source trust weighting in synthesis.
+- Pull star ratings straight from retailer listings instead of relying on
+  them appearing in review text.
+- A set of test questions with known good answers, to measure live accuracy.
 
 ## Layout
 
@@ -125,6 +148,7 @@ product-finder/
     models.py             # SourceSnippet / Tier / Recommendation dataclasses
     pipeline.py           # retrieve -> synthesize orchestration
     synthesis.py          # Claude call (structured output + prompt caching) + mock
+    verify.py             # quote, rating, spam and consensus checks
     cli.py                # command-line entry point
     app.py                # Flask dashboard
     retrieval/
@@ -133,4 +157,6 @@ product-finder/
       fetch.py            # robots-respecting page text extraction
     templates/ static/    # dashboard UI
     fixtures/             # sample data for --mock / demo
+  tests/                  # pytest checks for verify.py
+  RESEARCH_PROTOCOL.md    # rules every recommendation follows
 ```

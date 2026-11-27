@@ -44,6 +44,17 @@
           <p>{{ result.summary }}</p>
         </div>
 
+        {% if result.coverage %}
+          <div class="coverage">
+            What the search found:
+            Reddit {{ result.coverage.reddit }} ·
+            trusted reviewers {{ result.coverage.trusted_reviewers }} ·
+            other sites {{ result.coverage.other_web }}
+            {% if result.coverage.blocked_spam %} · {{ result.coverage.blocked_spam }} affiliate/spam pages dropped{% endif %}
+            {% if result.dropped_quotes %} · {{ result.dropped_quotes }} unverifiable quote{{ 's' if result.dropped_quotes != 1 }} removed{% endif %}
+          </div>
+        {% endif %}
+
         <div class="tiers">
           {% for t in result.tiers %}
             <div class="tier tier-{{ t.tier }}">
@@ -66,7 +77,17 @@
               <div class="tier-label">{{ t.tier }}</div>
               <h3>{{ t.product }}{% if t.approx_price %} <span class="price">~{{ t.approx_price }}</span>{% endif %}</h3>
               <p class="why">{{ t.why }}</p>
-              <p class="consensus">📊 {{ t.consensus }}</p>
+              {% if t.evidence_grade %}<span class="grade grade-{{ t.evidence_grade|lower }}">Evidence: {{ t.evidence_grade }}</span>{% endif %}
+              <p class="consensus">{{ t.consensus }}</p>
+              {% if t.rating %}
+                <p class="rating">★ {{ t.rating.stars }}{% if t.rating.count %} from {{ t.rating.count }} reviews{% endif %}
+                  <a href="{{ t.rating.source_url }}" target="_blank" rel="noopener">source ↗</a></p>
+              {% else %}
+                <p class="rating none">No verified star rating found</p>
+              {% endif %}
+              {% if t.warning %}<p class="warning">⚠ {{ t.warning }}</p>{% endif %}
+              {% if not t.verified %}<p class="warning">⚠ None of this pick's quotes matched the sources. Treat it as unverified.</p>{% endif %}
+              {% if t.image_url %}<p class="photo-note">Photo from image search; may not be this exact model.</p>{% endif %}
               {% for q in t.quotes %}
                 <blockquote>“{{ q.text }}”
                   <a href="{{ q.url }}" target="_blank" rel="noopener">source ↗</a>

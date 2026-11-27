@@ -40,7 +40,16 @@ def main(argv=None):
         price = f" (~{t.approx_price})" if t.approx_price else ""
         print(f"[{t.tier.upper()}] {t.product}{price}")
         print(f"    why: {t.why}")
-        print(f"    consensus: {t.consensus}")
+        print(f"    evidence: {t.consensus}")
+        if t.rating:
+            count = f" from {t.rating['count']} reviews" if t.rating.get("count") else ""
+            print(f"    rating: {t.rating['stars']:g} stars{count} ({t.rating.get('source_url', '')})")
+        else:
+            print("    rating: no verified star rating found")
+        if t.warning:
+            print(f"    WARNING: {t.warning}")
+        if not t.verified:
+            print("    WARNING: no quote matched the sources; treat as unverified")
         for q in t.quotes:
             print(f"    “{q.text}”")
             print(f"      -> {q.url}")
@@ -48,6 +57,11 @@ def main(argv=None):
     if rec.caveats:
         print(f"Caveats: {rec.caveats}")
     print(f"\nSources searched: {', '.join(rec.sources_searched)}")
+    if rec.coverage:
+        c = rec.coverage
+        print(f"Found: Reddit {c['reddit']}, trusted reviewers {c['trusted_reviewers']}, "
+              f"other sites {c['other_web']}; dropped {c['blocked_spam']} spam pages, "
+              f"{rec.dropped_quotes} unverifiable quotes")
     print(f"Evidence gathered: {len(rec.snippets)} snippets"
           + ("  [MOCK]" if rec.mock else ""))
     return 0
